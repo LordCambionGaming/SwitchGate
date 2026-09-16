@@ -1,18 +1,19 @@
-
-
 #include "raylib.h"
 #include "raymath.h"
 #include "Level.h"
+#include "Config.h"
+#include "Scores.h"
+#include "Editor.h"
+#include "UI.h"
 #include <vector>
 #include <string>
 #include <algorithm>
 #include <random>
 
-
 // Stato globale dell'applicazione
 
 
-enum class GameState { MENU, LEVEL_SELECT, PLAYING, HELP };
+enum class GameState { MENU, LEVEL_SELECT, PLAYING, HELP, SETTINGS, EDITOR };
 
 struct Player {
     Vector3 position{ 0, 1.0f, 8 };
@@ -25,7 +26,6 @@ static const float GRAVITY = -24.0f;
 static const float JUMP_SPEED = 9.0f;
 static const float MOVE_SPEED = 6.0f;
 static const float INTERACT_RANGE = 3.0f;
-
 
 // Fisica di base
 
@@ -74,7 +74,7 @@ static void ResolveObstacles(Vector3& pos, float radius, const std::vector<Level
     }
 }
 
-static void UpdatePlayerPhysics(Player& player, const LevelData& level, Vector3 moveInput, float dt) {
+static void UpdatePlayerPhysics(Player& player, const LevelData& level, Vector3 moveInput, float dt, bool jumpPressed) {
     // Movimento orizzontale
     if (moveInput.x != 0.0f || moveInput.z != 0.0f) {
         moveInput = Vector3Normalize(moveInput);
@@ -104,7 +104,7 @@ static void UpdatePlayerPhysics(Player& player, const LevelData& level, Vector3 
         player.onGround = !hasGround ? false : (feetY <= groundY + 0.02f);
     }
 
-    if (IsKeyPressed(KEY_SPACE) && player.onGround && level.gravityEnabled) {
+    if (jumpPressed && player.onGround && level.gravityEnabled) {
         player.velocity.y = JUMP_SPEED;
         player.onGround = false;
     }
@@ -130,6 +130,9 @@ struct RunState {
     float flashTimer = 0.0f;
     bool flashWrong = false;
     Player player;
+    float elapsedTime = 0.0f;
+    int score = 0;
+    bool isNewRecord = false;
 };
 
 static void StartRun(RunState& run, const LevelData& level, std::mt19937& rng) {
@@ -149,23 +152,12 @@ static void StartRun(RunState& run, const LevelData& level, std::mt19937& rng) {
     run.doorHeight = level.doorSize.y;
     run.flashTimer = 0.0f;
     run.flashWrong = false;
+    run.elapsedTime = 0.0f;
+    run.score = 0;
+    run.isNewRecord = false;
     run.player.position = level.playerStart;
     run.player.velocity = { 0, 0, 0 };
     run.player.onGround = false;
-}
-
-
-// Interfaccia: bottoni semplici cliccabili col mouse
-
-
-static bool DrawButton(Rectangle rect, const char* text, int fontSize, Color base, Color hover, Color textColor) {
-    Vector2 mouse = GetMousePosition();
-    bool isHover = CheckCollisionPointRec(mouse, rect);
-    DrawRectangleRounded(rect, 0.2f, 8, isHover ? hover : base);
-    DrawRectangleRoundedLines(rect, 0.2f, 8, 2.0f, Fade(BLACK, 0.35f));
-    int textWidth = MeasureText(text, fontSize);
-    DrawText(text, (int)(rect.x + (rect.width - textWidth) / 2), (int)(rect.y + (rect.height - fontSize) / 2), fontSize, textColor);
-    return isHover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
 }
 
 
@@ -201,6 +193,17 @@ int main() {
     std::random_device rd;
     std::mt19937 rng(rd());
 
+    KeyBindings kb;
+    if (!LoadKeyBindings("keybindings.json", kb)) SaveKeyBindings("keybindings.json", kb);
+
+    HighscoreMap highscores;
+    LoadHighscores("scores.json", highscores);
+
+    LevelEditor editor;
+    editor.NewLevel();
+    bool playtestFromEditor = false;
+    int rebindingIndex = -1;
+
     LevelManager levelManager;
     levelManager.ScanDirectory("levels");
 
@@ -222,19 +225,24 @@ int main() {
             if (!wantMusic && IsMusicStreamPlaying(menuMusic)) PauseMusicStream(menuMusic);
         }
 
-        if (IsKeyPressed(KEY_M)) musicMuted = !musicMuted;
+        if (IsKeyPressed(kb.toggleMusic)) musicMuted = !musicMuted;
 
-
+   
         // Aggiornamento logico per stato
+    
+        if (state == GameState::EDITOR) {
+            editor.Update();
+        }
 
         if (state == GameState::PLAYING) {
             Vector3 move = { 0, 0, 0 };
-            if (IsKeyDown(KEY_W)) move.z -= 1.0f;
-            if (IsKeyDown(KEY_S)) move.z += 1.0f;
-            if (IsKeyDown(KEY_A)) move.x -= 1.0f;
-            if (IsKeyDown(KEY_D)) move.x += 1.0f;
+            if (IsKeyDown(kb.moveUp)) move.z -= 1.0f;
+            if (IsKeyDown(kb.moveDown)) move.z += 1.0f;
+            if (IsKeyDown(kb.moveLeft)) move.x -= 1.0f;
+            if (IsKeyDown(kb.moveRight)) move.x += 1.0f;
+            bool jumpPressed = IsKeyPressed(kb.jump);
 
-            UpdatePlayerPhysics(run.player, currentLevel, move, dt);
+            UpdatePlayerPhysics(run.player, currentLevel, move, dt, jumpPressed);
 
             // La telecamera segue il giocatore: cosi' funziona correttamente anche
             // su livelli JSON creati dall'utente, di qualunque dimensione o forma,
@@ -285,23 +293,41 @@ int main() {
                 if (run.doorHeight < 0.0f) run.doorHeight = 0.0f;
             }
 
+            if (!run.won) run.elapsedTime += dt;
+
             if (run.solved && !run.won) {
                 float dx = run.player.position.x - currentLevel.exitPosition.x;
                 float dz = run.player.position.z - currentLevel.exitPosition.z;
                 float r = currentLevel.exitRadius;
-                if (dx * dx + dz * dz < r * r) run.won = true;
+                if (dx * dx + dz * dz < r * r) {
+                    run.won = true;
+                    run.score = (int)(currentLevel.switches.size() * 500 +
+                                       std::max(0.0f, 3000.0f - run.elapsedTime * 20.0f));
+                    if (!playtestFromEditor && !currentLevel.filePath.empty()) {
+                        HighscoreEntry& hs = highscores[currentLevel.filePath];
+                        run.isNewRecord = (!hs.hasScore || run.score > hs.bestScore);
+                        if (run.isNewRecord) {
+                            hs.hasScore = true;
+                            hs.bestScore = run.score;
+                            hs.bestTime = run.elapsedTime;
+                            SaveHighscores("scores.json", highscores);
+                        }
+                    }
+                }
             }
 
-            if (IsKeyPressed(KEY_R)) {
+            if (IsKeyPressed(kb.resetLevel)) {
                 StartRun(run, currentLevel, rng);
             }
-            if (IsKeyPressed(KEY_ESCAPE)) {
-                state = GameState::LEVEL_SELECT;
+            if (IsKeyPressed(kb.back)) {
+                state = playtestFromEditor ? GameState::EDITOR : GameState::LEVEL_SELECT;
+                playtestFromEditor = false;
             }
         }
 
+   
         // Disegno
-
+   
         BeginDrawing();
         ClearBackground(RAYWHITE);
 
@@ -333,13 +359,23 @@ int main() {
             int stw = MeasureText(subtitle, 20);
             DrawText(subtitle, screenWidth / 2 - stw / 2, 210, 20, DARKGRAY);
 
-            Rectangle playBtn = { screenWidth / 2.0f - 140, 300, 280, 56 };
-            Rectangle helpBtn = { screenWidth / 2.0f - 140, 370, 280, 56 };
-            Rectangle quitBtn = { screenWidth / 2.0f - 140, 440, 280, 56 };
+            Rectangle playBtn = { screenWidth / 2.0f - 140, 280, 280, 52 };
+            Rectangle editorBtn = { screenWidth / 2.0f - 140, 344, 280, 52 };
+            Rectangle settingsBtn = { screenWidth / 2.0f - 140, 408, 280, 52 };
+            Rectangle helpBtn = { screenWidth / 2.0f - 140, 472, 280, 52 };
+            Rectangle quitBtn = { screenWidth / 2.0f - 140, 536, 280, 52 };
 
             if (DrawButton(playBtn, "GIOCA", 26, Fade(DARKBLUE, 0.85f), DARKBLUE, WHITE)) {
                 levelManager.ScanDirectory("levels");
                 state = GameState::LEVEL_SELECT;
+            }
+            if (DrawButton(editorBtn, "EDITOR LIVELLI", 22, Fade(DARKGREEN, 0.85f), DARKGREEN, WHITE)) {
+                editor.NewLevel();
+                state = GameState::EDITOR;
+            }
+            if (DrawButton(settingsBtn, "IMPOSTAZIONI", 22, Fade(DARKBLUE, 0.6f), DARKBLUE, WHITE)) {
+                rebindingIndex = -1;
+                state = GameState::SETTINGS;
             }
             if (DrawButton(helpBtn, "COME SI GIOCA", 22, Fade(DARKGRAY, 0.8f), DARKGRAY, WHITE)) {
                 returnFromHelp = GameState::MENU;
@@ -376,6 +412,14 @@ int main() {
                     DrawText(levels[i].description.c_str(), 56, (int)(listY + 38), 14,
                               isSel ? Fade(WHITE, 0.9f) : DARKGRAY);
                 }
+                auto hsIt = highscores.find(levels[i].filePath);
+                if (hsIt != highscores.end() && hsIt->second.hasScore) {
+                    std::string recordText = "Record: " + FormatTime(hsIt->second.bestTime) +
+                                              "  -  " + std::to_string(hsIt->second.bestScore) + " punti";
+                    int rtw = MeasureText(recordText.c_str(), 14);
+                    DrawText(recordText.c_str(), (int)(screenWidth - 60 - rtw), (int)(listY + 22), 14,
+                              isSel ? GOLD : DARKGREEN);
+                }
                 listY += 74;
             }
 
@@ -407,18 +451,20 @@ int main() {
         else if (state == GameState::HELP) {
             DrawText("COME SI GIOCA", 40, 40, 32, DARKBLUE);
             const char* lines[] = {
-                "- Muoviti con W A S D.",
+                "- Muoviti con i tasti WASD (riassegnabili in IMPOSTAZIONI).",
                 "- SPAZIO per saltare (utile su piattaforme rialzate).",
                 "- Clicca col MOUSE gli interruttori colorati nell'ordine mostrato in alto.",
                 "- Devi essere abbastanza vicino a un interruttore per attivarlo.",
                 "- Sbagliando l'ordine il progresso del livello si azzera.",
                 "- Completata la sequenza la porta si apre: raggiungi il cerchio verde per vincere.",
                 "- Attento ai vuoti tra le piattaforme: cadendo torni al punto di partenza.",
+                "- Il tempo impiegato determina il punteggio: piu' veloce = punteggio piu' alto.",
                 "- R: ricomincia il livello corrente (nuova sequenza se e' casuale).",
                 "- ESC: torna alla selezione dei livelli.",
                 "- M: attiva/disattiva la musica del menu.",
                 "",
-                "Puoi creare nuovi livelli scrivendo file .json nella cartella 'levels/'.",
+                "Puoi creare nuovi livelli con l'EDITOR LIVELLI dal menu principale,",
+                "oppure scrivendo a mano un file .json nella cartella 'levels/'.",
                 "Vedi il file README.md per lo schema completo con tutti i campi disponibili.",
             };
             int y = 100;
@@ -429,6 +475,70 @@ int main() {
             Rectangle backBtn = { 40, screenHeight - 80.0f, 200, 50 };
             if (DrawButton(backBtn, "INDIETRO", 20, DARKGRAY, GRAY, WHITE)) {
                 state = returnFromHelp;
+            }
+        }
+        else if (state == GameState::SETTINGS) {
+            DrawText("IMPOSTAZIONI - TASTI", 40, 30, 32, DARKBLUE);
+            DrawText("Clicca su un tasto per riassegnarlo, poi premi il nuovo tasto desiderato.", 40, 70, 16, DARKGRAY);
+
+            struct BindRow { const char* label; int* key; };
+            BindRow rows[] = {
+                { "Avanti", &kb.moveUp },
+                { "Indietro", &kb.moveDown },
+                { "Sinistra", &kb.moveLeft },
+                { "Destra", &kb.moveRight },
+                { "Salta", &kb.jump },
+                { "Ricomincia livello", &kb.resetLevel },
+                { "Torna indietro / Esci dal livello", &kb.back },
+                { "Muta musica", &kb.toggleMusic },
+            };
+            const int rowCount = (int)(sizeof(rows) / sizeof(rows[0]));
+
+            if (rebindingIndex >= 0 && rebindingIndex < rowCount) {
+                int newKey = GetKeyPressed();
+                if (newKey != 0) {
+                    *(rows[rebindingIndex].key) = newKey;
+                    SaveKeyBindings("keybindings.json", kb);
+                    rebindingIndex = -1;
+                }
+            }
+
+            float y = 120;
+            for (int i = 0; i < rowCount; i++) {
+                DrawText(rows[i].label, 60, (int)y + 10, 20, BLACK);
+                Rectangle keyBtn = { 460, y, 220, 42 };
+                bool waiting = (rebindingIndex == i);
+                std::string label = waiting ? "Premi un tasto..." : KeyToName(*(rows[i].key));
+                if (DrawButton(keyBtn, label.c_str(), 18, waiting ? Fade(GOLD, 0.9f) : DARKBLUE,
+                               waiting ? GOLD : BLUE, WHITE)) {
+                    rebindingIndex = i;
+                }
+                y += 54;
+            }
+
+            Rectangle resetBtn = { 60, y + 20, 260, 46 };
+            if (DrawButton(resetBtn, "RIPRISTINA PREDEFINITI", 18, DARKGRAY, GRAY, WHITE)) {
+                kb = KeyBindings{};
+                SaveKeyBindings("keybindings.json", kb);
+                rebindingIndex = -1;
+            }
+
+            Rectangle backBtn = { 40, screenHeight - 80.0f, 200, 50 };
+            if (DrawButton(backBtn, "INDIETRO", 20, DARKGRAY, GRAY, WHITE)) {
+                rebindingIndex = -1;
+                state = GameState::MENU;
+            }
+        }
+        else if (state == GameState::EDITOR) {
+            editor.Draw();
+            if (editor.ConsumePlaytestRequest()) {
+                currentLevel = editor.BuildLevelData();
+                StartRun(run, currentLevel, rng);
+                playtestFromEditor = true;
+                state = GameState::PLAYING;
+            }
+            if (editor.ConsumeExitRequest()) {
+                state = GameState::MENU;
             }
         }
         else if (state == GameState::PLAYING) {
@@ -477,7 +587,8 @@ int main() {
             DrawText(seqText.c_str(), 10, 58, 18, BLACK);
             DrawText(TextFormat("Passo attuale: %d / %d", run.currentStep, (int)run.sequence.size()),
                       10, 80, 18, DARKBLUE);
-            DrawText("ESC: torna alla selezione livelli   |   R: ricomincia", 10, screenHeight - 26, 16, DARKGRAY);
+            DrawText(TextFormat("Tempo: %s", FormatTime(run.elapsedTime).c_str()), 10, 102, 18, DARKGREEN);
+            DrawText("ESC: torna indietro   |   R: ricomincia", 10, screenHeight - 26, 16, DARKGRAY);
 
             if (run.flashWrong) {
                 DrawText("SBAGLIATO! Riprova.", screenWidth / 2 - 100, 90, 24, RED);
@@ -486,15 +597,29 @@ int main() {
                 DrawText("Porta aperta! Vai verso il cerchio verde per uscire.", screenWidth / 2 - 260, 90, 24, DARKGREEN);
             }
             if (run.won) {
-                DrawRectangle(0, screenHeight / 2 - 70, screenWidth, 160, Fade(BLACK, 0.6f));
-                DrawText("HAI VINTO!", screenWidth / 2 - 110, screenHeight / 2 - 55, 44, GOLD);
-                Rectangle again = { screenWidth / 2 - 220.0f, screenHeight / 2 + 5.0f, 200, 46 };
-                Rectangle back  = { screenWidth / 2 + 20.0f,  screenHeight / 2 + 5.0f, 200, 46 };
+                DrawRectangle(0, screenHeight / 2 - 100, screenWidth, 220, Fade(BLACK, 0.65f));
+                DrawText("HAI VINTO!", screenWidth / 2 - 110, screenHeight / 2 - 90, 44, GOLD);
+                std::string statsText = "Tempo: " + FormatTime(run.elapsedTime) + "   Punteggio: " + std::to_string(run.score);
+                int stw = MeasureText(statsText.c_str(), 22);
+                DrawText(statsText.c_str(), screenWidth / 2 - stw / 2, screenHeight / 2 - 38, 22, WHITE);
+                if (playtestFromEditor) {
+                    const char* note = "(modalita' prova editor: il record non viene salvato)";
+                    int ntw = MeasureText(note, 16);
+                    DrawText(note, screenWidth / 2 - ntw / 2, screenHeight / 2 - 10, 16, LIGHTGRAY);
+                } else if (run.isNewRecord) {
+                    const char* rec = "NUOVO RECORD!";
+                    int rtw = MeasureText(rec, 20);
+                    DrawText(rec, screenWidth / 2 - rtw / 2, screenHeight / 2 - 10, 20, GOLD);
+                }
+                Rectangle again = { screenWidth / 2 - 220.0f, screenHeight / 2 + 30.0f, 200, 46 };
+                Rectangle back  = { screenWidth / 2 + 20.0f,  screenHeight / 2 + 30.0f, 200, 46 };
                 if (DrawButton(again, "RIGIOCA", 20, DARKGREEN, GREEN, WHITE)) {
                     StartRun(run, currentLevel, rng);
                 }
-                if (DrawButton(back, "ALTRI LIVELLI", 20, DARKBLUE, BLUE, WHITE)) {
-                    state = GameState::LEVEL_SELECT;
+                const char* backLabel = playtestFromEditor ? "TORNA ALL'EDITOR" : "ALTRI LIVELLI";
+                if (DrawButton(back, backLabel, playtestFromEditor ? 16 : 20, DARKBLUE, BLUE, WHITE)) {
+                    state = playtestFromEditor ? GameState::EDITOR : GameState::LEVEL_SELECT;
+                    playtestFromEditor = false;
                 }
             }
         }

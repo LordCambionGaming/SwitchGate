@@ -62,6 +62,10 @@ public:
     // altrimenti ritorna false e riempie 'errorMessage'.
     static bool LoadFromFile(const std::string& path, LevelData& out, std::string& errorMessage);
 
+    // Scrive un LevelData su disco in formato JSON, con lo stesso schema
+    // riconosciuto da LoadFromFile. Usata dall'editor di livelli.
+    static bool SaveToFile(const std::string& path, const LevelData& level, std::string& errorMessage);
+
 private:
     std::vector<LevelData> levels;
     std::vector<std::string> errors;

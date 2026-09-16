@@ -1,4 +1,3 @@
-
 #include "Level.h"
 #include "raymath.h"
 #include <nlohmann/json.hpp>
@@ -10,8 +9,9 @@
 
 using json = nlohmann::json;
 
-
+ 
 // Helper di conversione JSON -> tipi raylib
+ 
 
 static Vector3 ParseVec3(const json& j, Vector3 fallback) {
     if (!j.is_array() || j.size() < 3) return fallback;
@@ -78,9 +78,9 @@ static std::vector<LevelBox> ParseBoxArray(const json& arr) {
     return out;
 }
 
-
+ 
 // Caricamento di un singolo file
-
+ 
 
 bool LevelManager::LoadFromFile(const std::string& path, LevelData& out, std::string& errorMessage) {
     std::ifstream file(path);
@@ -165,9 +165,85 @@ bool LevelManager::LoadFromFile(const std::string& path, LevelData& out, std::st
     return true;
 }
 
+ 
+// Salvataggio (usato dall'editor di livelli)
+ 
 
+static bool ColorsEqual(Color a, Color b) {
+    return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+}
+
+static json ColorToJson(Color c) {
+    struct Named { const char* name; Color color; };
+    static const Named table[] = {
+        { "red", RED }, { "blue", BLUE }, { "green", GREEN }, { "yellow", YELLOW },
+        { "orange", ORANGE }, { "purple", PURPLE }, { "violet", VIOLET }, { "pink", PINK },
+        { "gold", GOLD }, { "lime", LIME }, { "skyblue", SKYBLUE }, { "white", WHITE },
+        { "black", BLACK }, { "gray", GRAY }, { "lightgray", LIGHTGRAY }, { "darkgray", DARKGRAY },
+        { "brown", BROWN }, { "darkbrown", DARKBROWN }, { "maroon", MAROON }, { "beige", BEIGE },
+    };
+    for (const auto& n : table) {
+        if (ColorsEqual(c, n.color)) return json(n.name);
+    }
+    if (c.a == 255) return json::array({ c.r, c.g, c.b });
+    return json::array({ c.r, c.g, c.b, c.a });
+}
+
+static json Vec3ToJson(Vector3 v) {
+    return json::array({ v.x, v.y, v.z });
+}
+
+static json BoxArrayToJson(const std::vector<LevelBox>& boxes) {
+    json arr = json::array();
+    for (const auto& b : boxes) {
+        arr.push_back({
+            { "position", Vec3ToJson(b.position) },
+            { "size", Vec3ToJson(b.size) },
+            { "color", ColorToJson(b.color) }
+        });
+    }
+    return arr;
+}
+
+bool LevelManager::SaveToFile(const std::string& path, const LevelData& level, std::string& errorMessage) {
+    json j;
+    j["name"] = level.name;
+    j["description"] = level.description;
+    j["player_start"] = Vec3ToJson(level.playerStart);
+    j["gravity"] = level.gravityEnabled;
+    j["fall_reset_y"] = level.fallResetY;
+
+    json switchesArr = json::array();
+    for (const auto& s : level.switches) {
+        switchesArr.push_back({
+            { "position", Vec3ToJson(s.position) },
+            { "color", ColorToJson(s.color) },
+            { "name", s.name }
+        });
+    }
+    j["switches"] = switchesArr;
+
+    j["random_sequence"] = level.randomSequence;
+    if (!level.randomSequence) j["sequence"] = level.fixedSequence;
+
+    j["platforms"] = BoxArrayToJson(level.platforms);
+    j["obstacles"] = BoxArrayToJson(level.obstacles);
+
+    j["door"] = { { "position", Vec3ToJson(level.doorPosition) }, { "size", Vec3ToJson(level.doorSize) } };
+    j["exit"] = { { "position", Vec3ToJson(level.exitPosition) }, { "radius", level.exitRadius } };
+
+    std::ofstream file(path);
+    if (!file.is_open()) {
+        errorMessage = "Impossibile scrivere il file: " + path;
+        return false;
+    }
+    file << j.dump(2);
+    return true;
+}
+
+ 
 // Scansione della cartella dei livelli
-
+ 
 
 void LevelManager::ScanDirectory(const std::string& directory) {
     levels.clear();
