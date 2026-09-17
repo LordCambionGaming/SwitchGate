@@ -15,12 +15,12 @@ jobs:
   build:
     runs-on: windows-latest
 
-   steps:
+    steps:
       - name: Checkout del codice
         uses: actions/checkout@v4
 
-      - name: Configura CMake (forzando Visual Studio 2022)
-        run: cmake -B build -S . -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=Release
+      - name: Configura CMake
+        run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
       - name: Compila il progetto
         run: cmake --build build --config Release
@@ -28,7 +28,6 @@ jobs:
       - name: Crea archivio ZIP del gioco
         shell: pwsh
         run: |
-          # Grazie al tuo CMakeLists.txt, in build/Release trovi l'eseguibile, levels/ e assets/
           Compress-Archive -Path "build/Release/*" -DestinationPath "Puzzle3D-Windows-x64.zip"
 
       - name: Pubblica Release e allega il file
