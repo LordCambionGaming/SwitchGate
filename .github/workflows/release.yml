@@ -1,0 +1,26 @@
+name: Crea Release Automatica
+
+on:
+  push:
+    tags:
+      - 'v*' # Si attiva ogni volta che fai il push di un tag che inizia con "v" (es. v1.0.0, v0.2.1)
+
+permissions:
+  contents: write # Necessario per permettere all'azione di creare la release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout del codice
+        uses: actions/checkout@v4
+
+      # (Facoltativo) Se il tuo progetto richiede una compilazione o un build, 
+      # puoi inserire qui i passaggi necessari (es. setup di Node, Python, Unity, ecc.)
+
+      - name: Crea la Release su GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true # Genera automaticamente il changelog dai commit
+          # files: |
+          #   percorso/del/tuo/file.zip  # Decommenta e inserisci eventuali file da allegare
