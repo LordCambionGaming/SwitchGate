@@ -1,12 +1,15 @@
-name: Crea Release Automatica
+name: Crea Release Manuale
 
 on:
-  push:
-    tags:
-      - 'v*' # Si attiva ogni volta che fai il push di un tag che inizia con "v" (es. v1.0.0, v0.2.1)
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Nome del tag (es. v26.0.1)'
+        required: true
+        default: 'v26.0.1'
 
 permissions:
-  contents: write # Necessario per permettere all'azione di creare la release
+  contents: write
 
 jobs:
   release:
@@ -15,12 +18,9 @@ jobs:
       - name: Checkout del codice
         uses: actions/checkout@v4
 
-      # (Facoltativo) Se il tuo progetto richiede una compilazione o un build, 
-      # puoi inserire qui i passaggi necessari (es. setup di Node, Python, Unity, ecc.)
-
-      - name: Crea la Release su GitHub
+      - name: Crea la Release
         uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true # Genera automaticamente il changelog dai commit
-          # files: |
-          #   percorso/del/tuo/file.zip  # Decommenta e inserisci eventuali file da allegare
+          tag_name: ${{ github.event.inputs.version }}
+          name: Release ${{ github.event.inputs.version }}
+          generate_release_notes: true
