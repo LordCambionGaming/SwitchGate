@@ -53,8 +53,8 @@ endif()
 #     cosi' i livelli JSON e la musica vengono trovati a runtime. ---
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
-            "${CMAKE_SOURCE_DIR}/levels" "$<TARGET_FILE_DIR:${PROJECT_NAME}>/levels"
+            "${CMAKE_SOURCE_DIR}/src/levels" "$<TARGET_FILE_DIR:${PROJECT_NAME}>/levels"
     COMMAND ${CMAKE_COMMAND} -E copy_directory
-            "${CMAKE_SOURCE_DIR}/assets" "$<TARGET_FILE_DIR:${PROJECT_NAME}>/assets"
+            "${CMAKE_SOURCE_DIR}/src/assets" "$<TARGET_FILE_DIR:${PROJECT_NAME}>/assets"
     COMMENT "Copio levels/ e assets/ nella cartella di output"
 )

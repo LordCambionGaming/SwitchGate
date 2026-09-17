@@ -16,6 +16,12 @@ static bool ColorsEq(Color a, Color b) {
     return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
 }
 
+static std::string ColorDisplayName(int paletteIndex) {
+    std::string name = kPalette[paletteIndex].first;
+    for (auto& c : name) c = (char)toupper((unsigned char)c);
+    return name;
+}
+
  
 // Coordinate mondo <-> schermo (vista dall'alto, x orizzontale, z profondita')
   
@@ -211,12 +217,14 @@ void LevelEditor::Update() {
         }
     }
     else if (tool == EditorTool::PLATFORM || tool == EditorTool::OBSTACLE) {
-        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && inCanvas) {
+        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
             isDraggingNew = true;
             dragStartWorld = mw;
+            dragStartedInCanvas = inCanvas;
         }
         if (isDraggingNew && IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) {
             isDraggingNew = false;
+            if (dragStartedInCanvas || inCanvas) {
             Vector2 endW = mw;
             float minX = std::min(dragStartWorld.x, endW.x), maxX = std::max(dragStartWorld.x, endW.x);
             float minZ = std::min(dragStartWorld.y, endW.y), maxZ = std::max(dragStartWorld.y, endW.y);
@@ -240,6 +248,7 @@ void LevelEditor::Update() {
                 box.position.y = newObstacleHeight / 2.0f;
                 working.obstacles.push_back(box);
             }
+            }
         }
     }
     else if (tool == EditorTool::SWITCH) {
@@ -247,7 +256,7 @@ void LevelEditor::Update() {
             LevelSwitch sw;
             sw.position = Vector3{ mw.x, newPlatformTopY + 0.5f, mw.y };
             sw.color = kPalette[colorIndex].second;
-            sw.name = "SW" + std::to_string(working.switches.size() + 1);
+            sw.name = ColorDisplayName(colorIndex);
             working.switches.push_back(sw);
             selType = EditorSelType::SWITCH;
             selIndex = (int)working.switches.size() - 1;
@@ -403,15 +412,23 @@ void LevelEditor::DrawSidebar() {
 
         if (selType == EditorSelType::SWITCH && selIndex >= 0 && selIndex < (int)working.switches.size()) {
             LevelSwitch& sw = working.switches[selIndex];
-            DrawText("Nome:", (int)x, (int)y, 11, DARKGRAY); y += 14;
-            { Rectangle r = { x, y, w, 24 }; TextBoxUpdate(r, sw.name, switchNameActive, 16, "Nome"); y += 28; }
+            DrawText("Nome (segue il colore):", (int)x, (int)y, 11, DARKGRAY); y += 16;
+            DrawText(sw.name.c_str(), (int)x, (int)y, 18, BLACK); y += 26;
 
             int curIdx = 0;
             for (size_t i = 0; i < kPalette.size(); i++) if (ColorsEq(kPalette[i].second, sw.color)) { curIdx = (int)i; break; }
             Rectangle prevBtn = { x, y, 28, 24 }, swatch = { x + 32, y, w - 92, 24 }, nextBtn = { x + w - 28, y, 28, 24 };
-            if (DrawMiniButton(prevBtn, "<", LIGHTGRAY, GRAY)) { curIdx = (curIdx - 1 + (int)kPalette.size()) % (int)kPalette.size(); sw.color = kPalette[curIdx].second; }
+            if (DrawMiniButton(prevBtn, "<", LIGHTGRAY, GRAY)) {
+                curIdx = (curIdx - 1 + (int)kPalette.size()) % (int)kPalette.size();
+                sw.color = kPalette[curIdx].second;
+                sw.name = ColorDisplayName(curIdx);
+            }
             DrawRectangleRec(swatch, sw.color); DrawRectangleLinesEx(swatch, 1, BLACK);
-            if (DrawMiniButton(nextBtn, ">", LIGHTGRAY, GRAY)) { curIdx = (curIdx + 1) % (int)kPalette.size(); sw.color = kPalette[curIdx].second; }
+            if (DrawMiniButton(nextBtn, ">", LIGHTGRAY, GRAY)) {
+                curIdx = (curIdx + 1) % (int)kPalette.size();
+                sw.color = kPalette[curIdx].second;
+                sw.name = ColorDisplayName(curIdx);
+            }
             y += 30;
 
             Rectangle del = { x, y, w, 26 };
@@ -572,7 +589,7 @@ void LevelEditor::DrawSaveDialog() {
     DrawRectangle(0, 0, 1280, 720, Fade(BLACK, 0.5f));
     Rectangle box = { 1280 / 2.0f - 260, 720 / 2.0f - 90, 520, 180 };
     DrawRectangleRounded(box, 0.05f, 8, RAYWHITE);
-    DrawRectangleRoundedLines(box, 0.05f, 8, 2, DARKGRAY);
+    DrawRectangleLinesEx(box, 2.0f, DARKGRAY);
     DrawText("Salva livello come:", (int)box.x + 20, (int)box.y + 16, 20, DARKBLUE);
 
     Rectangle tb = { box.x + 20, box.y + 56, box.width - 100, 32 };
@@ -602,7 +619,7 @@ void LevelEditor::DrawLoadDialog() {
     DrawRectangle(0, 0, 1280, 720, Fade(BLACK, 0.5f));
     Rectangle box = { 1280 / 2.0f - 320, 60, 640, 600 };
     DrawRectangleRounded(box, 0.03f, 8, RAYWHITE);
-    DrawRectangleRoundedLines(box, 0.03f, 8, 2, DARKGRAY);
+    DrawRectangleLinesEx(box, 2.0f, DARKGRAY);
     DrawText("Carica un livello esistente", (int)box.x + 20, (int)box.y + 16, 22, DARKBLUE);
 
     const auto& levels = loadBrowser.GetLevels();

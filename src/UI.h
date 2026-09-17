@@ -1,4 +1,3 @@
-
 #pragma once
 
 #include "raylib.h"
@@ -8,7 +7,7 @@ inline bool DrawButton(Rectangle rect, const char* text, int fontSize, Color bas
     Vector2 mouse = GetMousePosition();
     bool isHover = CheckCollisionPointRec(mouse, rect);
     DrawRectangleRounded(rect, 0.2f, 8, isHover ? hover : base);
-    DrawRectangleRoundedLines(rect, 0.2f, 8, 2.0f, Fade(BLACK, 0.35f));
+    DrawRectangleLinesEx(rect, 2.0f, Fade(BLACK, 0.35f));
     int textWidth = MeasureText(text, fontSize);
     DrawText(text, (int)(rect.x + (rect.width - textWidth) / 2), (int)(rect.y + (rect.height - fontSize) / 2), fontSize, textColor);
     return isHover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);

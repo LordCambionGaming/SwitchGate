@@ -28,6 +28,7 @@ private:
     int selIndex = -1;
 
     bool isDraggingNew = false;
+    bool dragStartedInCanvas = false;
     Vector2 dragStartWorld{ 0, 0 };
     bool isDraggingSel = false;
     Vector2 dragOffsetWorld{ 0, 0 };
