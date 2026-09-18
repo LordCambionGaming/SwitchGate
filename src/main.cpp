@@ -5,6 +5,7 @@
 #include "Scores.h"
 #include "Editor.h"
 #include "UI.h"
+#include "rlgl.h"
 #include <vector>
 #include <string>
 #include <algorithm>
@@ -32,6 +33,30 @@ static const float GRAVITY = -24.0f;
 static const float JUMP_SPEED = 9.0f;
 static const float MOVE_SPEED = 6.0f;
 static const float INTERACT_RANGE = 3.0f;
+static const float RENDER_DISTANCE = 60.0f;
+
+// True se un oggetto (approssimato a una sfera) puo' ricadere nel campo visivo
+// della camera: usato per saltare del tutto la chiamata DrawCube per tutto
+// cio' che e' troppo lontano o fuori dal cono di vista, invece di mandarlo
+// alla scheda video e farlo scartare li'.
+static bool IsVisibleToCamera(const Camera3D& camera, Vector3 objPos, float objRadius) {
+    Vector3 toObj = Vector3Subtract(objPos, camera.position);
+    float dist = Vector3Length(toObj);
+    if (dist > RENDER_DISTANCE + objRadius) return false;
+    if (dist < 0.001f) return true;
+
+    Vector3 forward = Vector3Normalize(Vector3Subtract(camera.target, camera.position));
+    Vector3 dirToObj = Vector3Scale(toObj, 1.0f / dist);
+    float cosAngle = Vector3DotProduct(forward, dirToObj);
+
+    // Margine generoso oltre il campo visivo verticale: copre anche
+    // l'estensione orizzontale (piu' ampia, essendo lo schermo 16:9) e la
+    // dimensione dell'oggetto stesso, cosi' non sparisce troppo presto ai
+    // bordi dello schermo.
+    float halfFovRad = (camera.fovy * 0.5f + 25.0f) * DEG2RAD;
+    float angleMargin = atanf(objRadius / dist);
+    return cosAngle > cosf(halfFovRad + angleMargin);
+}
 
 // Fisica di base
 
@@ -177,6 +202,7 @@ int main() {
     const int screenHeight = 720;
 
     InitWindow(screenWidth, screenHeight, "Puzzle 3D - Interruttori");
+    rlEnableBackfaceCulling();
     SetExitKey(KEY_NULL);
     SetTargetFPS(60);
 
@@ -579,16 +605,21 @@ int main() {
             BeginMode3D(camera);
 
             for (const auto& p : currentLevel.platforms) {
+                float radius = Vector3Length(Vector3Scale(p.size, 0.5f));
+                if (!IsVisibleToCamera(camera, p.position, radius)) continue;
                 DrawCube(p.position, p.size.x, p.size.y, p.size.z, p.color);
                 DrawCubeWires(p.position, p.size.x, p.size.y, p.size.z, Fade(BLACK, 0.25f));
             }
             for (const auto& o : currentLevel.obstacles) {
+                float radius = Vector3Length(Vector3Scale(o.size, 0.5f));
+                if (!IsVisibleToCamera(camera, o.position, radius)) continue;
                 DrawCube(o.position, o.size.x, o.size.y, o.size.z, o.color);
                 DrawCubeWires(o.position, o.size.x, o.size.y, o.size.z, DARKGRAY);
             }
 
             for (size_t i = 0; i < currentLevel.switches.size(); i++) {
                 const auto& s = currentLevel.switches[i];
+                if (!IsVisibleToCamera(camera, s.position, 0.87f)) continue;
                 Color c = run.activated[i] ? s.color : Fade(s.color, 0.4f);
                 DrawCube(s.position, 1, 1, 1, c);
                 DrawCubeWires(s.position, 1, 1, 1, DARKGRAY);
