@@ -139,6 +139,7 @@ struct RunState {
     float elapsedTime = 0.0f;
     int score = 0;
     bool isNewRecord = false;
+    float cameraYaw = 0.0f;
 };
 
 static void StartRun(RunState& run, const LevelData& level, std::mt19937& rng) {
@@ -161,6 +162,7 @@ static void StartRun(RunState& run, const LevelData& level, std::mt19937& rng) {
     run.elapsedTime = 0.0f;
     run.score = 0;
     run.isNewRecord = false;
+    run.cameraYaw = 0.0f;
     run.player.position = level.playerStart;
     run.player.velocity = { 0, 0, 0 };
     run.player.onGround = false;
@@ -251,14 +253,17 @@ int main() {
 
             UpdatePlayerPhysics(run.player, currentLevel, move, dt, jumpPressed);
 
-            // La telecamera segue il giocatore: cosi' funziona correttamente anche
-            // su livelli JSON creati dall'utente, di qualunque dimensione o forma,
-            // invece di restare fissa su un'inquadratura pensata per un solo livello.
+            // Tasto destro + trascina: ruota la camera intorno al giocatore.
+            if (IsMouseButtonDown(MOUSE_RIGHT_BUTTON)) {
+                run.cameraYaw -= GetMouseDelta().x * 0.006f;
+            }
+
             camera.target = run.player.position;
+            const float cameraDistance = 10.0f;
             camera.position = Vector3{
-                run.player.position.x,
+                run.player.position.x - cameraDistance * sinf(run.cameraYaw),
                 run.player.position.y + 10.0f,
-                run.player.position.z + 10.0f
+                run.player.position.z + cameraDistance * cosf(run.cameraYaw)
             };
 
             if (!run.solved && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
@@ -460,6 +465,7 @@ int main() {
             const char* lines[] = {
                 "- Muoviti con i tasti WASD (riassegnabili in IMPOSTAZIONI).",
                 "- SPAZIO per saltare (utile su piattaforme rialzate).",
+                "- Tasto destro del mouse + trascina: ruota la camera intorno al personaggio.",
                 "- Clicca col MOUSE gli interruttori colorati nell'ordine mostrato in alto.",
                 "- Devi essere abbastanza vicino a un interruttore per attivarlo.",
                 "- Sbagliando l'ordine il progresso del livello si azzera.",
@@ -595,7 +601,7 @@ int main() {
             DrawText(TextFormat("Passo attuale: %d / %d", run.currentStep, (int)run.sequence.size()),
                       10, 80, 18, DARKBLUE);
             DrawText(TextFormat("Tempo: %s", FormatTime(run.elapsedTime).c_str()), 10, 102, 18, DARKGREEN);
-            DrawText("ESC: torna indietro   |   R: ricomincia", 10, screenHeight - 26, 16, DARKGRAY);
+            DrawText("ESC: torna indietro   |   R: ricomincia   |   Tasto destro: ruota camera", 10, screenHeight - 26, 16, DARKGRAY);
 
             if (run.flashWrong) {
                 DrawText("SBAGLIATO! Riprova.", screenWidth / 2 - 100, 90, 24, RED);
