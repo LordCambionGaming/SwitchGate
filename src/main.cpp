@@ -10,6 +10,12 @@
 #include <algorithm>
 #include <random>
 
+#if defined(_WIN32) && defined(NDEBUG)
+// Nelle build Release su Windows, nasconde la finestra della console nera
+// che altrimenti si apre insieme alla finestra di gioco.
+#pragma comment(linker, "/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup")
+#endif
+
 // Stato globale dell'applicazione
 
 
@@ -169,6 +175,7 @@ int main() {
     const int screenHeight = 720;
 
     InitWindow(screenWidth, screenHeight, "Puzzle 3D - Interruttori");
+    SetExitKey(KEY_NULL);
     SetTargetFPS(60);
 
     InitAudioDevice();

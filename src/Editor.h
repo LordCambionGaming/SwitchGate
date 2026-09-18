@@ -36,6 +36,7 @@ private:
     float newPlatformTopY = 0.0f;
     float newObstacleHeight = 3.0f;
     int colorIndex = 0;
+    float sidebarScroll = 0.0f;
 
     bool nameActive = false;
     bool descActive = false;

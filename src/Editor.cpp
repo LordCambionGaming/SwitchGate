@@ -1,6 +1,7 @@
 #include "Editor.h"
 #include "UI.h"
 #include "raymath.h"
+#include "rlgl.h"
 #include <algorithm>
 #include <cmath>
 #include <cctype>
@@ -325,7 +326,21 @@ void LevelEditor::DrawTopBar() {
 }
 
 void LevelEditor::DrawSidebar() {
-    float x = 10, w = 220, y = 104;
+    const float sidebarTop = 104.0f;
+    const float sidebarBottom = 648.0f;
+    Rectangle sidebarVisibleRect = { 0, sidebarTop, 240, sidebarBottom - sidebarTop };
+
+    if (CheckCollisionPointRec(GetMousePosition(), sidebarVisibleRect)) {
+        sidebarScroll -= GetMouseWheelMove() * 30.0f;
+    }
+    if (sidebarScroll < 0.0f) sidebarScroll = 0.0f;
+
+    g_uiScrollOffsetY = sidebarScroll;
+    BeginScissorMode((int)sidebarVisibleRect.x, (int)sidebarVisibleRect.y, (int)sidebarVisibleRect.width, (int)sidebarVisibleRect.height);
+    rlPushMatrix();
+    rlTranslatef(0, -sidebarScroll, 0);
+
+    float x = 10, w = 220, y = sidebarTop;
 
     DrawText("STRUMENTI", (int)x, (int)y, 16, DARKBLUE); y += 22;
 
@@ -508,6 +523,24 @@ void LevelEditor::DrawSidebar() {
             DrawText(s.c_str(), (int)x, (int)y, 11, DARKGRAY);
             y += 18;
         }
+    }
+
+    y += 10;
+    float contentHeight = y - sidebarTop;
+
+    rlPopMatrix();
+    EndScissorMode();
+    g_uiScrollOffsetY = 0.0f;
+
+    float maxScroll = std::max(0.0f, contentHeight - (sidebarBottom - sidebarTop));
+    if (sidebarScroll > maxScroll) sidebarScroll = maxScroll;
+
+    if (maxScroll > 0.0f) {
+        Rectangle track = { 232, sidebarTop, 5, sidebarBottom - sidebarTop };
+        DrawRectangleRec(track, Fade(LIGHTGRAY, 0.6f));
+        float thumbH = std::max(20.0f, track.height * (track.height / contentHeight));
+        float thumbY = track.y + (track.height - thumbH) * (sidebarScroll / maxScroll);
+        DrawRectangleRec(Rectangle{ track.x, thumbY, track.width, thumbH }, DARKGRAY);
     }
 
     DrawText("Trascina per creare/spostare.", (int)x, 660, 11, GRAY);

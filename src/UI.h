@@ -3,8 +3,16 @@
 #include "raylib.h"
 #include <string>
 
+// Offset applicato alla posizione del mouse usata per il rilevamento dei
+// click nei pannelli scrollabili (es. la barra laterale dell'editor): il
+// contenuto viene disegnato spostato via rlTranslatef, quindi anche il
+// controllo di collisione deve tenerne conto. Chi apre un pannello
+// scrollabile lo imposta prima di disegnare e lo azzera subito dopo.
+inline float g_uiScrollOffsetY = 0.0f;
+
 inline bool DrawButton(Rectangle rect, const char* text, int fontSize, Color base, Color hover, Color textColor) {
     Vector2 mouse = GetMousePosition();
+    mouse.y += g_uiScrollOffsetY;
     bool isHover = CheckCollisionPointRec(mouse, rect);
     DrawRectangleRounded(rect, 0.2f, 8, isHover ? hover : base);
     DrawRectangleLinesEx(rect, 2.0f, Fade(BLACK, 0.35f));
@@ -16,6 +24,7 @@ inline bool DrawButton(Rectangle rect, const char* text, int fontSize, Color bas
 // Bottone piccolo pensato per "+"/"-"/frecce, con solo bordo e testo grande.
 inline bool DrawMiniButton(Rectangle rect, const char* text, Color base, Color hover) {
     Vector2 mouse = GetMousePosition();
+    mouse.y += g_uiScrollOffsetY;
     bool isHover = CheckCollisionPointRec(mouse, rect);
     DrawRectangleRec(rect, isHover ? hover : base);
     DrawRectangleLinesEx(rect, 1.5f, Fade(BLACK, 0.4f));
@@ -29,6 +38,7 @@ inline bool DrawMiniButton(Rectangle rect, const char* text, Color base, Color h
 // Ritorna true nel frame in cui il testo e' cambiato.
 inline bool TextBoxUpdate(Rectangle rect, std::string& text, bool& active, size_t maxLen, const char* placeholder = nullptr) {
     Vector2 mouse = GetMousePosition();
+    mouse.y += g_uiScrollOffsetY;
     bool hover = CheckCollisionPointRec(mouse, rect);
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) active = hover;
 
