@@ -156,7 +156,7 @@ struct RunState {
     int currentStep = 0;
     bool solved = false;
     bool won = false;
-    float doorHeight = 3.0f;
+    std::vector<float> doorHeights;
     float flashTimer = 0.0f;
     bool flashWrong = false;
     Player player;
@@ -180,7 +180,8 @@ static void StartRun(RunState& run, const LevelData& level, std::mt19937& rng) {
     run.currentStep = 0;
     run.solved = false;
     run.won = false;
-    run.doorHeight = level.doorSize.y;
+    run.doorHeights.resize(level.doors.size());
+    for (size_t i = 0; i < level.doors.size(); i++) run.doorHeights[i] = level.doors[i].size.y;
     run.flashTimer = 0.0f;
     run.flashWrong = false;
     run.elapsedTime = 0.0f;
@@ -322,9 +323,15 @@ int main() {
 
             if (run.flashTimer > 0.0f) run.flashTimer -= dt; else run.flashWrong = false;
 
-            if (run.solved && run.doorHeight > 0.01f) {
-                run.doorHeight -= dt * 2.0f;
-                if (run.doorHeight < 0.0f) run.doorHeight = 0.0f;
+            for (size_t i = 0; i < currentLevel.doors.size(); i++) {
+                const LevelDoor& door = currentLevel.doors[i];
+                bool shouldBeOpen = (door.linkedSwitch < 0)
+                    ? run.solved
+                    : (door.linkedSwitch < (int)run.activated.size() && run.activated[door.linkedSwitch]);
+                float target = shouldBeOpen ? 0.0f : door.size.y;
+                float speed = dt * 2.0f;
+                if (run.doorHeights[i] < target) run.doorHeights[i] = std::min(target, run.doorHeights[i] + speed);
+                else if (run.doorHeights[i] > target) run.doorHeights[i] = std::max(target, run.doorHeights[i] - speed);
             }
 
             if (!run.won) run.elapsedTime += dt;
@@ -617,10 +624,13 @@ int main() {
                 DrawCubeWires(s.position, 1, 1, 1, DARKGRAY);
             }
 
-            if (run.doorHeight > 0.01f) {
-                Vector3 dp = { currentLevel.doorPosition.x, run.doorHeight / 2.0f, currentLevel.doorPosition.z };
-                DrawCube(dp, currentLevel.doorSize.x, run.doorHeight, currentLevel.doorSize.z, DARKBROWN);
-                DrawCubeWires(dp, currentLevel.doorSize.x, run.doorHeight, currentLevel.doorSize.z, BLACK);
+            for (size_t i = 0; i < currentLevel.doors.size(); i++) {
+                const auto& door = currentLevel.doors[i];
+                float h = run.doorHeights[i];
+                if (h <= 0.01f) continue;
+                Vector3 dp = { door.position.x, h / 2.0f, door.position.z };
+                DrawCube(dp, door.size.x, h, door.size.z, door.color);
+                DrawCubeWires(dp, door.size.x, h, door.size.z, BLACK);
             }
 
             DrawCircle3D(currentLevel.exitPosition, currentLevel.exitRadius, Vector3{ 1, 0, 0 }, 90.0f,

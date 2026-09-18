@@ -60,8 +60,8 @@ void LevelEditor::NewLevel() {
     working.platforms.clear();
     working.platforms.push_back(LevelBox{ Vector3{ 0, -0.25f, 0 }, Vector3{ 20, 0.5f, 20 }, LIGHTGRAY });
     working.obstacles.clear();
-    working.doorPosition = Vector3{ 0, 0, -9 };
-    working.doorSize = Vector3{ 4, 3, 0.5f };
+    working.doors.clear();
+    working.doors.push_back(LevelDoor{ Vector3{ 0, 0, -9 }, Vector3{ 4, 3, 0.5f }, DARKBROWN, -1 });
     working.exitPosition = Vector3{ 0, 0, -11 };
     working.exitRadius = 1.5f;
     working.fallResetY = -8.0f;
@@ -106,10 +106,11 @@ void LevelEditor::PickAt(Vector2 w) {
         float r = working.exitRadius;
         if (dx * dx + dz * dz <= r * r) { selType = EditorSelType::EXIT; selIndex = -1; return; }
     }
-    {
-        float halfX = working.doorSize.x / 2.0f, halfZ = 0.6f;
-        if (fabsf(working.doorPosition.x - w.x) <= halfX && fabsf(working.doorPosition.z - w.y) <= halfZ) {
-            selType = EditorSelType::DOOR; selIndex = -1; return;
+    for (int i = (int)working.doors.size() - 1; i >= 0; i--) {
+        const auto& d = working.doors[i];
+        float halfX = d.size.x / 2.0f, halfZ = 0.6f;
+        if (fabsf(d.position.x - w.x) <= halfX && fabsf(d.position.z - w.y) <= halfZ) {
+            selType = EditorSelType::DOOR; selIndex = i; return;
         }
     }
     for (int i = (int)working.obstacles.size() - 1; i >= 0; i--) {
@@ -132,9 +133,15 @@ void LevelEditor::DeleteSelected() {
         working.platforms.erase(working.platforms.begin() + selIndex);
     } else if (selType == EditorSelType::OBSTACLE && selIndex >= 0 && selIndex < (int)working.obstacles.size()) {
         working.obstacles.erase(working.obstacles.begin() + selIndex);
+    } else if (selType == EditorSelType::DOOR && selIndex >= 0 && selIndex < (int)working.doors.size()) {
+        working.doors.erase(working.doors.begin() + selIndex);
     } else if (selType == EditorSelType::SWITCH && selIndex >= 0 && selIndex < (int)working.switches.size()) {
         if (working.switches.size() <= 1) { SetStatus("Deve rimanere almeno un interruttore.", true); return; }
         working.switches.erase(working.switches.begin() + selIndex);
+        for (auto& door : working.doors) {
+            if (door.linkedSwitch == selIndex) door.linkedSwitch = -1;
+            else if (door.linkedSwitch > selIndex) door.linkedSwitch--;
+        }
     } else {
         SetStatus("Questo oggetto non si puo' eliminare.", true);
         return;
@@ -180,7 +187,9 @@ void LevelEditor::Update() {
                         break;
                     case EditorSelType::START: ox = working.playerStart.x; oz = working.playerStart.z; break;
                     case EditorSelType::EXIT: ox = working.exitPosition.x; oz = working.exitPosition.z; break;
-                    case EditorSelType::DOOR: ox = working.doorPosition.x; oz = working.doorPosition.z; break;
+                    case EditorSelType::DOOR:
+                        if (selIndex >= 0) { ox = working.doors[selIndex].position.x; oz = working.doors[selIndex].position.z; }
+                        break;
                     case EditorSelType::PLATFORM:
                         if (selIndex >= 0) { ox = working.platforms[selIndex].position.x; oz = working.platforms[selIndex].position.z; }
                         break;
@@ -201,7 +210,9 @@ void LevelEditor::Update() {
                     break;
                 case EditorSelType::START: working.playerStart.x = nx; working.playerStart.z = nz; break;
                 case EditorSelType::EXIT: working.exitPosition.x = nx; working.exitPosition.z = nz; break;
-                case EditorSelType::DOOR: working.doorPosition.x = nx; working.doorPosition.z = nz; break;
+                case EditorSelType::DOOR:
+                    if (selIndex >= 0) { working.doors[selIndex].position.x = nx; working.doors[selIndex].position.z = nz; }
+                    break;
                 case EditorSelType::PLATFORM:
                     if (selIndex >= 0) { working.platforms[selIndex].position.x = nx; working.platforms[selIndex].position.z = nz; }
                     break;
@@ -273,8 +284,15 @@ void LevelEditor::Update() {
     }
     else if (tool == EditorTool::DOOR) {
         if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && inCanvas) {
-            working.doorPosition.x = mw.x;
-            working.doorPosition.z = mw.y;
+            LevelDoor door;
+            door.position = Vector3{ mw.x, 0, mw.y };
+            door.size = Vector3{ 4, 3, 0.5f };
+            door.color = DARKBROWN;
+            door.linkedSwitch = -1;
+            working.doors.push_back(door);
+            selType = EditorSelType::DOOR;
+            selIndex = (int)working.doors.size() - 1;
+            tool = EditorTool::SELECT;
         }
     }
     else if (tool == EditorTool::EXIT) {
@@ -493,21 +511,43 @@ void LevelEditor::DrawSidebar() {
                 y += 30;
             }
         }
-        else if (selType == EditorSelType::DOOR) {
+        else if (selType == EditorSelType::DOOR && selIndex >= 0 && selIndex < (int)working.doors.size()) {
+            LevelDoor& door = working.doors[selIndex];
             DrawText("Larghezza porta:", (int)x, (int)y, 11, DARKGRAY); y += 14;
             { Rectangle m = { x, y, 28, 24 }, p = { x + w - 28, y, 28, 24 };
-              if (DrawMiniButton(m, "-", LIGHTGRAY, GRAY)) working.doorSize.x = std::max(1.0f, working.doorSize.x - 0.5f);
-              if (DrawMiniButton(p, "+", LIGHTGRAY, GRAY)) working.doorSize.x += 0.5f;
-              std::string s = TextFormat("%.1f", working.doorSize.x);
+              if (DrawMiniButton(m, "-", LIGHTGRAY, GRAY)) door.size.x = std::max(1.0f, door.size.x - 0.5f);
+              if (DrawMiniButton(p, "+", LIGHTGRAY, GRAY)) door.size.x += 0.5f;
+              std::string s = TextFormat("%.1f", door.size.x);
               DrawText(s.c_str(), (int)(x + w / 2 - MeasureText(s.c_str(), 16) / 2), (int)y + 3, 16, BLACK);
               y += 28; }
             DrawText("Altezza porta:", (int)x, (int)y, 11, DARKGRAY); y += 14;
             { Rectangle m = { x, y, 28, 24 }, p = { x + w - 28, y, 28, 24 };
-              if (DrawMiniButton(m, "-", LIGHTGRAY, GRAY)) working.doorSize.y = std::max(1.0f, working.doorSize.y - 0.5f);
-              if (DrawMiniButton(p, "+", LIGHTGRAY, GRAY)) working.doorSize.y += 0.5f;
-              std::string s = TextFormat("%.1f", working.doorSize.y);
+              if (DrawMiniButton(m, "-", LIGHTGRAY, GRAY)) door.size.y = std::max(1.0f, door.size.y - 0.5f);
+              if (DrawMiniButton(p, "+", LIGHTGRAY, GRAY)) door.size.y += 0.5f;
+              std::string s = TextFormat("%.1f", door.size.y);
               DrawText(s.c_str(), (int)(x + w / 2 - MeasureText(s.c_str(), 16) / 2), (int)y + 3, 16, BLACK);
               y += 28; }
+
+            DrawText("Si apre con:", (int)x, (int)y, 11, DARKGRAY); y += 14;
+            {
+                std::string label = (door.linkedSwitch < 0 || door.linkedSwitch >= (int)working.switches.size())
+                    ? "Puzzle completo"
+                    : working.switches[door.linkedSwitch].name;
+                Rectangle m = { x, y, 28, 24 }, p = { x + w - 28, y, 28, 24 };
+                int n = (int)working.switches.size();
+                if (DrawMiniButton(m, "<", LIGHTGRAY, GRAY)) {
+                    door.linkedSwitch = (door.linkedSwitch <= -1) ? (n - 1) : (door.linkedSwitch - 1);
+                }
+                DrawText(label.c_str(), (int)(x + w / 2 - MeasureText(label.c_str(), 13) / 2), (int)y + 5, 13, BLACK);
+                if (DrawMiniButton(p, ">", LIGHTGRAY, GRAY)) {
+                    door.linkedSwitch = (door.linkedSwitch >= n - 1) ? -1 : (door.linkedSwitch + 1);
+                }
+                y += 28;
+            }
+
+            Rectangle del = { x, y, w, 26 };
+            if (DrawButton(del, "ELIMINA", 13, MAROON, RED, WHITE)) DeleteSelected();
+            y += 30;
         }
         else if (selType == EditorSelType::EXIT) {
             DrawText("Raggio uscita:", (int)x, (int)y, 11, DARKGRAY); y += 14;
@@ -578,12 +618,16 @@ void LevelEditor::DrawCanvas() {
         DrawRectangleRec(r, Fade(o.color, 0.95f));
         DrawRectangleLinesEx(r, sel ? 3.0f : 1.5f, sel ? GOLD : BLACK);
     }
-    {
-        Vector2 c = WorldToScreen(working.doorPosition.x, working.doorPosition.z);
-        Rectangle r = { c.x - working.doorSize.x * scale / 2, c.y - 6, working.doorSize.x * scale, 12 };
-        bool sel = (selType == EditorSelType::DOOR);
-        DrawRectangleRec(r, DARKBROWN);
+    for (size_t i = 0; i < working.doors.size(); i++) {
+        const auto& d = working.doors[i];
+        Vector2 c = WorldToScreen(d.position.x, d.position.z);
+        Rectangle r = { c.x - d.size.x * scale / 2, c.y - 6, d.size.x * scale, 12 };
+        bool sel = (selType == EditorSelType::DOOR && selIndex == (int)i);
+        DrawRectangleRec(r, d.color);
         DrawRectangleLinesEx(r, sel ? 3.0f : 1.0f, sel ? GOLD : BLACK);
+        if (d.linkedSwitch >= 0 && d.linkedSwitch < (int)working.switches.size()) {
+            DrawText(working.switches[d.linkedSwitch].name.c_str(), (int)c.x + 8, (int)c.y - 18, 12, DARKBLUE);
+        }
     }
     {
         Vector2 c = WorldToScreen(working.exitPosition.x, working.exitPosition.z);

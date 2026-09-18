@@ -20,6 +20,16 @@ struct LevelBox {
     Color color = LIGHTGRAY;
 };
 
+// Una porta che si apre quando un interruttore specifico viene attivato
+// (linkedSwitch = indice in LevelData::switches), oppure quando l'intero
+// puzzle e' risolto se linkedSwitch e' -1.
+struct LevelDoor {
+    Vector3 position{ 0, 0, -9 };
+    Vector3 size{ 4, 3, 0.5f };
+    Color color = DARKBROWN;
+    int linkedSwitch = -1;
+};
+
 // Tutti i dati che descrivono un livello giocabile.
 struct LevelData {
     std::string filePath;              // percorso del file .json di origine
@@ -36,8 +46,7 @@ struct LevelData {
     std::vector<LevelBox> platforms;   // superfici su cui camminare/saltare (il "pavimento")
     std::vector<LevelBox> obstacles;   // muri pieni (bloccano il movimento orizzontale)
 
-    Vector3 doorPosition{ 0, 0, -9 };
-    Vector3 doorSize{ 4, 3, 0.5f };
+    std::vector<LevelDoor> doors;
 
     Vector3 exitPosition{ 0, 0, -11 };
     float exitRadius = 1.5f;

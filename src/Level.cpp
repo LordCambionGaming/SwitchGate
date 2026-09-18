@@ -146,10 +146,23 @@ bool LevelManager::LoadFromFile(const std::string& path, LevelData& out, std::st
         }
         if (j.contains("obstacles")) lvl.obstacles = ParseBoxArray(j["obstacles"]);
 
-        if (j.contains("door")) {
+        if (j.contains("doors") && j["doors"].is_array()) {
+            for (const auto& d : j["doors"]) {
+                LevelDoor door;
+                if (d.contains("position")) door.position = ParseVec3(d["position"], door.position);
+                if (d.contains("size")) door.size = ParseVec3(d["size"], door.size);
+                if (d.contains("color")) door.color = ParseColor(d["color"], door.color);
+                if (d.contains("linked_switch")) door.linkedSwitch = d["linked_switch"].get<int>();
+                lvl.doors.push_back(door);
+            }
+        } else if (j.contains("door")) {
+            // Schema precedente: una singola porta, sempre legata alla
+            // risoluzione dell'intero puzzle.
             const auto& d = j["door"];
-            if (d.contains("position")) lvl.doorPosition = ParseVec3(d["position"], lvl.doorPosition);
-            if (d.contains("size")) lvl.doorSize = ParseVec3(d["size"], lvl.doorSize);
+            LevelDoor door;
+            if (d.contains("position")) door.position = ParseVec3(d["position"], door.position);
+            if (d.contains("size")) door.size = ParseVec3(d["size"], door.size);
+            lvl.doors.push_back(door);
         }
         if (j.contains("exit")) {
             const auto& e = j["exit"];
@@ -229,7 +242,16 @@ bool LevelManager::SaveToFile(const std::string& path, const LevelData& level, s
     j["platforms"] = BoxArrayToJson(level.platforms);
     j["obstacles"] = BoxArrayToJson(level.obstacles);
 
-    j["door"] = { { "position", Vec3ToJson(level.doorPosition) }, { "size", Vec3ToJson(level.doorSize) } };
+    json doorsArr = json::array();
+    for (const auto& d : level.doors) {
+        doorsArr.push_back({
+            { "position", Vec3ToJson(d.position) },
+            { "size", Vec3ToJson(d.size) },
+            { "color", ColorToJson(d.color) },
+            { "linked_switch", d.linkedSwitch }
+        });
+    }
+    j["doors"] = doorsArr;
     j["exit"] = { { "position", Vec3ToJson(level.exitPosition) }, { "radius", level.exitRadius } };
 
     std::ofstream file(path);

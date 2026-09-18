@@ -21,7 +21,7 @@
     { "position": [6,  5.0, -10], "size": [6, 0.5, 6], "color": "gold" }
   ],
   "obstacles": [],
-  "door": { "position": [6, 5, -13], "size": [4, 3, 0.5] },
+  "doors": [ { "position": [6, 5, -13], "size": [4, 3, 0.5], "linked_switch": -1 } ],
   "exit": { "position": [6, 5, -15], "radius": 1.5 },
   "fall_reset_y": -8
 }
