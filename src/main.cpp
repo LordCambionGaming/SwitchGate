@@ -244,19 +244,24 @@ int main() {
         }
 
         if (state == GameState::PLAYING) {
+            // Tasto destro + trascina: ruota la camera intorno al giocatore.
+            if (IsMouseButtonDown(MOUSE_RIGHT_BUTTON)) {
+                run.cameraYaw -= GetMouseDelta().x * 0.006f * kb.mouseSensitivity;
+            }
+
+            // "Avanti" e "destra" sono relativi a dove guarda la camera, non
+            // agli assi fissi del mondo: cosi' WASD si comporta in modo
+            // naturale anche dopo aver ruotato la visuale.
+            Vector3 camForward = { sinf(run.cameraYaw), 0, -cosf(run.cameraYaw) };
+            Vector3 camRight = { cosf(run.cameraYaw), 0, sinf(run.cameraYaw) };
             Vector3 move = { 0, 0, 0 };
-            if (IsKeyDown(kb.moveUp)) move.z -= 1.0f;
-            if (IsKeyDown(kb.moveDown)) move.z += 1.0f;
-            if (IsKeyDown(kb.moveLeft)) move.x -= 1.0f;
-            if (IsKeyDown(kb.moveRight)) move.x += 1.0f;
+            if (IsKeyDown(kb.moveUp))    move = Vector3Add(move, camForward);
+            if (IsKeyDown(kb.moveDown))  move = Vector3Subtract(move, camForward);
+            if (IsKeyDown(kb.moveLeft))  move = Vector3Subtract(move, camRight);
+            if (IsKeyDown(kb.moveRight)) move = Vector3Add(move, camRight);
             bool jumpPressed = IsKeyPressed(kb.jump);
 
             UpdatePlayerPhysics(run.player, currentLevel, move, dt, jumpPressed);
-
-            // Tasto destro + trascina: ruota la camera intorno al giocatore.
-            if (IsMouseButtonDown(MOUSE_RIGHT_BUTTON)) {
-                run.cameraYaw -= GetMouseDelta().x * 0.006f;
-            }
 
             camera.target = run.player.position;
             const float cameraDistance = 10.0f;
@@ -491,7 +496,7 @@ int main() {
             }
         }
         else if (state == GameState::SETTINGS) {
-            DrawText("IMPOSTAZIONI - TASTI", 40, 30, 32, DARKBLUE);
+            DrawText("IMPOSTAZIONI", 40, 30, 32, DARKBLUE);
             DrawText("Clicca su un tasto per riassegnarlo, poi premi il nuovo tasto desiderato.", 40, 70, 16, DARKGRAY);
 
             struct BindRow { const char* label; int* key; };
@@ -534,6 +539,22 @@ int main() {
                 kb = KeyBindings{};
                 SaveKeyBindings("keybindings.json", kb);
                 rebindingIndex = -1;
+            }
+
+            float sensY = y + 20;
+            DrawText("Sensibilita' rotazione camera:", 400, (int)sensY + 13, 20, BLACK);
+            Rectangle sensMinus = { 700, sensY, 46, 46 };
+            Rectangle sensPlus  = { 880, sensY, 46, 46 };
+            if (DrawMiniButton(sensMinus, "-", LIGHTGRAY, GRAY)) {
+                kb.mouseSensitivity = std::max(0.2f, kb.mouseSensitivity - 0.1f);
+                SaveKeyBindings("keybindings.json", kb);
+            }
+            std::string sensVal = TextFormat("%.1fx", kb.mouseSensitivity);
+            int svw = MeasureText(sensVal.c_str(), 24);
+            DrawText(sensVal.c_str(), (int)(746 + (880 - 746) / 2 - svw / 2), (int)sensY + 11, 24, DARKBLUE);
+            if (DrawMiniButton(sensPlus, "+", LIGHTGRAY, GRAY)) {
+                kb.mouseSensitivity = std::min(3.0f, kb.mouseSensitivity + 0.1f);
+                SaveKeyBindings("keybindings.json", kb);
             }
 
             Rectangle backBtn = { 40, screenHeight - 80.0f, 200, 50 };

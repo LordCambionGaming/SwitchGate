@@ -10,6 +10,7 @@ struct KeyBindings {
     int resetLevel = 82; // R
     int back = 256;      // ESCAPE
     int toggleMusic = 77;// M
+    float mouseSensitivity = 1.0f;
 };
 
 // Nome leggibile di un tasto (es. 341 -> "LEFT_CONTROL", 65 -> "A").
