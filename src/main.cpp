@@ -32,7 +32,6 @@ struct Player {
 static const float GRAVITY = -24.0f;
 static const float JUMP_SPEED = 9.0f;
 static const float MOVE_SPEED = 6.0f;
-static const float INTERACT_RANGE = 3.0f;
 static const float RENDER_DISTANCE = 60.0f;
 
 // True se un oggetto (approssimato a una sfera) puo' ricadere nel campo visivo
@@ -297,8 +296,7 @@ int main() {
                 run.player.position.z + cameraDistance * cosf(run.cameraYaw)
             };
 
-            if (!run.solved && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-                Ray ray = GetMouseRay(GetMousePosition(), camera);
+            if (!run.solved && IsKeyPressed(kb.interact)) {
                 for (int i = 0; i < (int)currentLevel.switches.size(); i++) {
                     if (run.activated[i]) continue;
                     const Vector3& sp = currentLevel.switches[i].position;
@@ -306,26 +304,19 @@ int main() {
                         Vector3{ sp.x - 0.5f, sp.y - 0.5f, sp.z - 0.5f },
                         Vector3{ sp.x + 0.5f, sp.y + 0.5f, sp.z + 0.5f }
                     };
-                    RayCollision col = GetRayCollisionBox(ray, box);
-                    if (col.hit) {
-                        float dist = Vector3Distance(run.player.position, sp);
-                        if (dist > INTERACT_RANGE) {
-                            run.flashWrong = true;
-                            run.flashTimer = 1.0f;
-                            break;
-                        }
-                        if (i == run.sequence[run.currentStep]) {
-                            run.activated[i] = true;
-                            run.currentStep++;
-                            if (run.currentStep >= (int)run.sequence.size()) run.solved = true;
-                        } else {
-                            std::fill(run.activated.begin(), run.activated.end(), false);
-                            run.currentStep = 0;
-                            run.flashWrong = true;
-                            run.flashTimer = 1.0f;
-                        }
-                        break;
+                    if (!CheckCollisionBoxSphere(box, run.player.position, run.player.radius)) continue;
+
+                    if (i == run.sequence[run.currentStep]) {
+                        run.activated[i] = true;
+                        run.currentStep++;
+                        if (run.currentStep >= (int)run.sequence.size()) run.solved = true;
+                    } else {
+                        std::fill(run.activated.begin(), run.activated.end(), false);
+                        run.currentStep = 0;
+                        run.flashWrong = true;
+                        run.flashTimer = 1.0f;
                     }
+                    break;
                 }
             }
 
@@ -497,7 +488,7 @@ int main() {
                 "- Muoviti con i tasti WASD (riassegnabili in IMPOSTAZIONI).",
                 "- SPAZIO per saltare (utile su piattaforme rialzate).",
                 "- Tasto destro del mouse + trascina: ruota la camera intorno al personaggio.",
-                "- Clicca col MOUSE gli interruttori colorati nell'ordine mostrato in alto.",
+                "- Cammina addosso a un interruttore e premi E per attivarlo, nell'ordine mostrato in alto.",
                 "- Devi essere abbastanza vicino a un interruttore per attivarlo.",
                 "- Sbagliando l'ordine il progresso del livello si azzera.",
                 "- Completata la sequenza la porta si apre: raggiungi il cerchio verde per vincere.",
@@ -532,6 +523,7 @@ int main() {
                 { "Sinistra", &kb.moveLeft },
                 { "Destra", &kb.moveRight },
                 { "Salta", &kb.jump },
+                { "Interagisci (interruttori)", &kb.interact },
                 { "Ricomincia livello", &kb.resetLevel },
                 { "Torna indietro / Esci dal livello", &kb.back },
                 { "Muta musica", &kb.toggleMusic },
@@ -641,7 +633,7 @@ int main() {
 
             // --- HUD ---
             DrawText(currentLevel.name.c_str(), 10, 10, 22, DARKBLUE);
-            DrawText("Muoviti con WASD, SPAZIO per saltare. Clicca gli interruttori nell'ordine giusto.",
+            DrawText("Muoviti con WASD, SPAZIO per saltare. Tocca un interruttore e premi E per attivarlo.",
                       10, 36, 16, DARKGRAY);
 
             std::string seqText = "Sequenza: ";

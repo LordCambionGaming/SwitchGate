@@ -10,6 +10,7 @@ struct KeyBindings {
     int resetLevel = 82; // R
     int back = 256;      // ESCAPE
     int toggleMusic = 77;// M
+    int interact = 69;   // E
     float mouseSensitivity = 1.0f;
 };
 
