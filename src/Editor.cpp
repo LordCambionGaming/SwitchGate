@@ -108,7 +108,8 @@ void LevelEditor::PickAt(Vector2 w) {
     }
     for (int i = (int)working.doors.size() - 1; i >= 0; i--) {
         const auto& d = working.doors[i];
-        float halfX = d.size.x / 2.0f, halfZ = 0.6f;
+        Vector3 eff = GetDoorEffectiveSize(d);
+        float halfX = eff.x / 2.0f, halfZ = std::max(0.6f, eff.z / 2.0f);
         if (fabsf(d.position.x - w.x) <= halfX && fabsf(d.position.z - w.y) <= halfZ) {
             selType = EditorSelType::DOOR; selIndex = i; return;
         }
@@ -141,6 +142,14 @@ void LevelEditor::DeleteSelected() {
         for (auto& door : working.doors) {
             if (door.linkedSwitch == selIndex) door.linkedSwitch = -1;
             else if (door.linkedSwitch > selIndex) door.linkedSwitch--;
+        }
+        for (size_t k = 0; k < working.fixedSequence.size(); ) {
+            if (working.fixedSequence[k] == selIndex) {
+                working.fixedSequence.erase(working.fixedSequence.begin() + k);
+                continue;
+            }
+            if (working.fixedSequence[k] > selIndex) working.fixedSequence[k]--;
+            k++;
         }
     } else {
         SetStatus("Questo oggetto non si puo' eliminare.", true);
@@ -270,6 +279,7 @@ void LevelEditor::Update() {
             sw.color = kPalette[colorIndex].second;
             sw.name = ColorDisplayName(colorIndex);
             working.switches.push_back(sw);
+            working.fixedSequence.push_back((int)working.switches.size() - 1);
             selType = EditorSelType::SWITCH;
             selIndex = (int)working.switches.size() - 1;
             tool = EditorTool::SELECT;
@@ -438,6 +448,30 @@ void LevelEditor::DrawSidebar() {
         y += 31;
     }
 
+    if (!working.randomSequence) {
+        if (working.fixedSequence.size() != working.switches.size()) {
+            working.fixedSequence.resize(working.switches.size());
+            for (size_t k = 0; k < working.switches.size(); k++) working.fixedSequence[k] = (int)k;
+        }
+        DrawText("Ordine sequenza fissa:", (int)x, (int)y, 11, DARKGRAY); y += 16;
+        for (size_t k = 0; k < working.fixedSequence.size(); k++) {
+            int swIdx = working.fixedSequence[k];
+            std::string rowLabel = std::to_string(k + 1) + ". " +
+                ((swIdx >= 0 && swIdx < (int)working.switches.size()) ? working.switches[swIdx].name : "?");
+            Rectangle rowRect = { x, y, w - 56, 24 };
+            DrawRectangleRec(rowRect, Fade(LIGHTGRAY, 0.4f));
+            DrawText(rowLabel.c_str(), (int)x + 4, (int)y + 4, 14, BLACK);
+            Rectangle up = { x + w - 52, y, 24, 24 }, down = { x + w - 26, y, 24, 24 };
+            if (DrawMiniButton(up, "^", LIGHTGRAY, GRAY) && k > 0) {
+                std::swap(working.fixedSequence[k], working.fixedSequence[k - 1]);
+            }
+            if (DrawMiniButton(down, "v", LIGHTGRAY, GRAY) && k + 1 < working.fixedSequence.size()) {
+                std::swap(working.fixedSequence[k], working.fixedSequence[k + 1]);
+            }
+            y += 27;
+        }
+    }
+
     y += 4;
     if (selType != EditorSelType::NONE) {
         DrawRectangle((int)x, (int)y, (int)w, 2, Fade(BLACK, 0.2f)); y += 10;
@@ -545,6 +579,13 @@ void LevelEditor::DrawSidebar() {
                 y += 28;
             }
 
+            {
+                Rectangle rotBtn = { x, y, w, 26 };
+                std::string rotLabel = std::string("Orientamento: ") + (door.rotated ? "Z (ruotata)" : "X (normale)");
+                if (DrawButton(rotBtn, rotLabel.c_str(), 13, DARKBLUE, BLUE, WHITE)) door.rotated = !door.rotated;
+                y += 30;
+            }
+
             Rectangle del = { x, y, w, 26 };
             if (DrawButton(del, "ELIMINA", 13, MAROON, RED, WHITE)) DeleteSelected();
             y += 30;
@@ -620,8 +661,10 @@ void LevelEditor::DrawCanvas() {
     }
     for (size_t i = 0; i < working.doors.size(); i++) {
         const auto& d = working.doors[i];
+        Vector3 eff = GetDoorEffectiveSize(d);
         Vector2 c = WorldToScreen(d.position.x, d.position.z);
-        Rectangle r = { c.x - d.size.x * scale / 2, c.y - 6, d.size.x * scale, 12 };
+        float halfDepthPx = std::max(6.0f, eff.z * scale / 2.0f);
+        Rectangle r = { c.x - eff.x * scale / 2, c.y - halfDepthPx, eff.x * scale, halfDepthPx * 2.0f };
         bool sel = (selType == EditorSelType::DOOR && selIndex == (int)i);
         DrawRectangleRec(r, d.color);
         DrawRectangleLinesEx(r, sel ? 3.0f : 1.0f, sel ? GOLD : BLACK);

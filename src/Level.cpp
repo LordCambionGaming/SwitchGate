@@ -153,6 +153,7 @@ bool LevelManager::LoadFromFile(const std::string& path, LevelData& out, std::st
                 if (d.contains("size")) door.size = ParseVec3(d["size"], door.size);
                 if (d.contains("color")) door.color = ParseColor(d["color"], door.color);
                 if (d.contains("linked_switch")) door.linkedSwitch = d["linked_switch"].get<int>();
+                if (d.contains("rotated")) door.rotated = d["rotated"].get<bool>();
                 lvl.doors.push_back(door);
             }
         } else if (j.contains("door")) {
@@ -248,7 +249,8 @@ bool LevelManager::SaveToFile(const std::string& path, const LevelData& level, s
             { "position", Vec3ToJson(d.position) },
             { "size", Vec3ToJson(d.size) },
             { "color", ColorToJson(d.color) },
-            { "linked_switch", d.linkedSwitch }
+            { "linked_switch", d.linkedSwitch },
+            { "rotated", d.rotated }
         });
     }
     j["doors"] = doorsArr;

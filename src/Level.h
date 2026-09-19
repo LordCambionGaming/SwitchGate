@@ -1,4 +1,3 @@
-
 #pragma once
 
 #include "raylib.h"
@@ -22,13 +21,22 @@ struct LevelBox {
 
 // Una porta che si apre quando un interruttore specifico viene attivato
 // (linkedSwitch = indice in LevelData::switches), oppure quando l'intero
-// puzzle e' risolto se linkedSwitch e' -1.
+// puzzle e' risolto se linkedSwitch e' -1. "rotated" scambia larghezza (X) e
+// profondita' (Z), per poterla orientare anche su un muro laterale.
 struct LevelDoor {
     Vector3 position{ 0, 0, -9 };
     Vector3 size{ 4, 3, 0.5f };
     Color color = DARKBROWN;
     int linkedSwitch = -1;
+    bool rotated = false;
 };
+
+// Dimensioni della porta come vanno effettivamente usate per disegno e
+// collisioni: se "rotated" e' true, X e Z sono scambiate.
+inline Vector3 GetDoorEffectiveSize(const LevelDoor& door) {
+    if (!door.rotated) return door.size;
+    return Vector3{ door.size.z, door.size.y, door.size.x };
+}
 
 // Tutti i dati che descrivono un livello giocabile.
 struct LevelData {

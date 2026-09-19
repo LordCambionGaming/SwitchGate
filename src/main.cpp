@@ -79,32 +79,44 @@ static bool FindGroundY(const LevelData& level, float x, float z, float& outY) {
 
 // Spinge il giocatore fuori dagli ostacoli solidi (trattati come muri a tutta
 // altezza): semplice risoluzione per assi separati (x poi z).
-static void ResolveObstacles(Vector3& pos, float radius, const std::vector<LevelBox>& obstacles) {
-    for (const auto& o : obstacles) {
-        float minX = o.position.x - o.size.x / 2.0f - radius;
-        float maxX = o.position.x + o.size.x / 2.0f + radius;
-        float minZ = o.position.z - o.size.z / 2.0f - radius;
-        float maxZ = o.position.z + o.size.z / 2.0f + radius;
+static void ResolveBoxCollision(Vector3& pos, float radius, Vector3 boxPos, Vector3 boxSize) {
+    float minX = boxPos.x - boxSize.x / 2.0f - radius;
+    float maxX = boxPos.x + boxSize.x / 2.0f + radius;
+    float minZ = boxPos.z - boxSize.z / 2.0f - radius;
+    float maxZ = boxPos.z + boxSize.z / 2.0f + radius;
 
-        if (pos.x > minX && pos.x < maxX && pos.z > minZ && pos.z < maxZ) {
-            float overlapLeft = pos.x - minX;
-            float overlapRight = maxX - pos.x;
-            float overlapBack = pos.z - minZ;
-            float overlapFront = maxZ - pos.z;
+    if (pos.x > minX && pos.x < maxX && pos.z > minZ && pos.z < maxZ) {
+        float overlapLeft = pos.x - minX;
+        float overlapRight = maxX - pos.x;
+        float overlapBack = pos.z - minZ;
+        float overlapFront = maxZ - pos.z;
 
-            float minOverlapX = std::min(overlapLeft, overlapRight);
-            float minOverlapZ = std::min(overlapBack, overlapFront);
+        float minOverlapX = std::min(overlapLeft, overlapRight);
+        float minOverlapZ = std::min(overlapBack, overlapFront);
 
-            if (minOverlapX < minOverlapZ) {
-                pos.x += (overlapLeft < overlapRight) ? -minOverlapX : minOverlapX;
-            } else {
-                pos.z += (overlapBack < overlapFront) ? -minOverlapZ : minOverlapZ;
-            }
+        if (minOverlapX < minOverlapZ) {
+            pos.x += (overlapLeft < overlapRight) ? -minOverlapX : minOverlapX;
+        } else {
+            pos.z += (overlapBack < overlapFront) ? -minOverlapZ : minOverlapZ;
         }
     }
 }
 
-static void UpdatePlayerPhysics(Player& player, const LevelData& level, Vector3 moveInput, float dt, bool jumpPressed) {
+static void ResolveObstacles(Vector3& pos, float radius, const std::vector<LevelBox>& obstacles) {
+    for (const auto& o : obstacles) ResolveBoxCollision(pos, radius, o.position, o.size);
+}
+
+// Una porta blocca il passaggio solo mentre non e' (quasi) del tutto aperta;
+// l'altezza attuale viene dall'animazione della partita in corso, non dal
+// dato statico del livello.
+static void ResolveDoors(Vector3& pos, float radius, const std::vector<LevelDoor>& doors, const std::vector<float>& doorHeights) {
+    for (size_t i = 0; i < doors.size(); i++) {
+        if (i < doorHeights.size() && doorHeights[i] <= 0.1f) continue;
+        ResolveBoxCollision(pos, radius, doors[i].position, GetDoorEffectiveSize(doors[i]));
+    }
+}
+
+static void UpdatePlayerPhysics(Player& player, const LevelData& level, const std::vector<float>& doorHeights, Vector3 moveInput, float dt, bool jumpPressed) {
     // Movimento orizzontale
     if (moveInput.x != 0.0f || moveInput.z != 0.0f) {
         moveInput = Vector3Normalize(moveInput);
@@ -112,6 +124,7 @@ static void UpdatePlayerPhysics(Player& player, const LevelData& level, Vector3 
         player.position.z += moveInput.z * MOVE_SPEED * dt;
     }
     ResolveObstacles(player.position, player.radius, level.obstacles);
+    ResolveDoors(player.position, player.radius, level.doors, doorHeights);
     player.position.x = Clamp(player.position.x, -19.5f, 19.5f);
     player.position.z = Clamp(player.position.z, -19.5f, 19.5f);
 
@@ -287,7 +300,7 @@ int main() {
             if (IsKeyDown(kb.moveRight)) move = Vector3Add(move, camRight);
             bool jumpPressed = IsKeyPressed(kb.jump);
 
-            UpdatePlayerPhysics(run.player, currentLevel, move, dt, jumpPressed);
+            UpdatePlayerPhysics(run.player, currentLevel, run.doorHeights, move, dt, jumpPressed);
 
             camera.target = run.player.position;
             const float cameraDistance = 10.0f;
@@ -628,9 +641,10 @@ int main() {
                 const auto& door = currentLevel.doors[i];
                 float h = run.doorHeights[i];
                 if (h <= 0.01f) continue;
+                Vector3 effSize = GetDoorEffectiveSize(door);
                 Vector3 dp = { door.position.x, h / 2.0f, door.position.z };
-                DrawCube(dp, door.size.x, h, door.size.z, door.color);
-                DrawCubeWires(dp, door.size.x, h, door.size.z, BLACK);
+                DrawCube(dp, effSize.x, h, effSize.z, door.color);
+                DrawCubeWires(dp, effSize.x, h, effSize.z, BLACK);
             }
 
             DrawCircle3D(currentLevel.exitPosition, currentLevel.exitRadius, Vector3{ 1, 0, 0 }, 90.0f,
