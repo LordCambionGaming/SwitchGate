@@ -177,6 +177,10 @@ struct RunState {
     int score = 0;
     bool isNewRecord = false;
     float cameraYaw = 0.0f;
+    float targetCameraYaw = 0.0f;
+
+    std::vector<Vector3> draggablePos;
+    std::vector<Vector3> draggableVel;
 };
 
 static void StartRun(RunState& run, const LevelData& level, std::mt19937& rng) {
@@ -201,6 +205,10 @@ static void StartRun(RunState& run, const LevelData& level, std::mt19937& rng) {
     run.score = 0;
     run.isNewRecord = false;
     run.cameraYaw = 0.0f;
+    run.targetCameraYaw = 0.0f;
+    run.draggablePos.clear();
+    run.draggableVel.assign(level.draggables.size(), Vector3{ 0, 0, 0 });
+    for (const auto& d : level.draggables) run.draggablePos.push_back(d.position);
     run.player.position = level.playerStart;
     run.player.velocity = { 0, 0, 0 };
     run.player.onGround = false;
@@ -283,14 +291,23 @@ int main() {
         }
 
         if (state == GameState::PLAYING) {
-            // Tasto destro + trascina: ruota la camera intorno al giocatore.
-            if (IsMouseButtonDown(MOUSE_RIGHT_BUTTON)) {
-                run.cameraYaw -= GetMouseDelta().x * 0.006f * kb.mouseSensitivity;
+            if (IsKeyPressed(kb.rotateLeft)) run.targetCameraYaw += PI / 2.0f;
+            if (IsKeyPressed(kb.rotateRight)) run.targetCameraYaw -= PI / 2.0f;
+
+            // Anima la camera verso l'angolo scelto (multiplo di 90 gradi),
+            // prendendo sempre il verso piu' breve.
+            {
+                float diff = run.targetCameraYaw - run.cameraYaw;
+                while (diff > PI) diff -= 2.0f * PI;
+                while (diff < -PI) diff += 2.0f * PI;
+                float rotSpeed = 5.0f * kb.mouseSensitivity;
+                if (fabsf(diff) < 0.02f) run.cameraYaw = run.targetCameraYaw;
+                else run.cameraYaw += Clamp(diff, -rotSpeed * dt, rotSpeed * dt);
             }
 
             // "Avanti" e "destra" sono relativi a dove guarda la camera, non
             // agli assi fissi del mondo: cosi' WASD si comporta in modo
-            // naturale anche dopo aver ruotato la visuale.
+            // naturale in ognuna delle 4 direzioni scelte.
             Vector3 camForward = { sinf(run.cameraYaw), 0, -cosf(run.cameraYaw) };
             Vector3 camRight = { cosf(run.cameraYaw), 0, sinf(run.cameraYaw) };
             Vector3 move = { 0, 0, 0 };
@@ -309,6 +326,61 @@ int main() {
                 run.player.position.y + 10.0f,
                 run.player.position.z + cameraDistance * cosf(run.cameraYaw)
             };
+
+            // Il giocatore spinge le casse camminandoci contro: si spostano
+            // solo lungo l'asse (X o Z) su cui la sovrapposizione e' minore,
+            // cosi' il movimento resta sempre allineato a una delle 4 direzioni.
+            for (size_t i = 0; i < run.draggablePos.size(); i++) {
+                Vector3& cratePos = run.draggablePos[i];
+                Vector3 crateSize = currentLevel.draggables[i].size;
+                float minX = cratePos.x - crateSize.x / 2.0f - run.player.radius;
+                float maxX = cratePos.x + crateSize.x / 2.0f + run.player.radius;
+                float minZ = cratePos.z - crateSize.z / 2.0f - run.player.radius;
+                float maxZ = cratePos.z + crateSize.z / 2.0f + run.player.radius;
+
+                if (run.player.position.x > minX && run.player.position.x < maxX &&
+                    run.player.position.z > minZ && run.player.position.z < maxZ) {
+                    float overlapLeft = run.player.position.x - minX, overlapRight = maxX - run.player.position.x;
+                    float overlapBack = run.player.position.z - minZ, overlapFront = maxZ - run.player.position.z;
+                    float minOverlapX = std::min(overlapLeft, overlapRight);
+                    float minOverlapZ = std::min(overlapBack, overlapFront);
+
+                    float pushX = 0.0f, pushZ = 0.0f;
+                    if (minOverlapX < minOverlapZ) pushX = (overlapLeft < overlapRight) ? -minOverlapX : minOverlapX;
+                    else pushZ = (overlapBack < overlapFront) ? -minOverlapZ : minOverlapZ;
+
+                    cratePos.x += pushX;
+                    cratePos.z += pushZ;
+
+                    // La cassa non puo' essere spinta dentro un muro o una porta chiusa.
+                    float crateRadius = std::max(crateSize.x, crateSize.z) / 2.0f;
+                    ResolveObstacles(cratePos, crateRadius, currentLevel.obstacles);
+                    ResolveDoors(cratePos, crateRadius, currentLevel.doors, run.doorHeights);
+
+                    // E il giocatore non resta a compenetrare la cassa, sia che
+                    // si sia spostata (spinta) sia che sia rimasta ferma (bloccata).
+                    ResolveBoxCollision(run.player.position, run.player.radius, cratePos, crateSize);
+                }
+            }
+
+            for (size_t i = 0; i < run.draggablePos.size(); i++) {
+                Vector3& dp = run.draggablePos[i];
+                Vector3& dv = run.draggableVel[i];
+                if (currentLevel.gravityEnabled) dv.y += GRAVITY * dt; else dv.y = 0.0f;
+                dp.y += dv.y * dt;
+
+                float halfH = currentLevel.draggables[i].size.y / 2.0f;
+                float groundY;
+                bool hasGround = FindGroundY(currentLevel, dp.x, dp.z, groundY);
+                if (hasGround && dp.y - halfH <= groundY && dv.y <= 0.0f) {
+                    dp.y = groundY + halfH;
+                    dv.y = 0.0f;
+                }
+                if (dp.y < currentLevel.fallResetY) {
+                    dp = currentLevel.draggables[i].position;
+                    dv = { 0, 0, 0 };
+                }
+            }
 
             if (!run.solved && IsKeyPressed(kb.interact)) {
                 for (int i = 0; i < (int)currentLevel.switches.size(); i++) {
@@ -507,8 +579,9 @@ int main() {
             const char* lines[] = {
                 "- Muoviti con i tasti WASD (riassegnabili in IMPOSTAZIONI).",
                 "- SPAZIO per saltare (utile su piattaforme rialzate).",
-                "- Tasto destro del mouse + trascina: ruota la camera intorno al personaggio.",
+                "- Frecce SINISTRA/DESTRA (o i pulsanti in basso a destra): ruota la camera di 90 gradi.",
                 "- Cammina addosso a un interruttore e premi E per attivarlo, nell'ordine mostrato in alto.",
+                "- Cammina contro le casse arancioni per spingerle, lungo una delle 4 direzioni.",
                 "- Devi essere abbastanza vicino a un interruttore per attivarlo.",
                 "- Sbagliando l'ordine il progresso del livello si azzera.",
                 "- Completata la sequenza la porta si apre: raggiungi il cerchio verde per vincere.",
@@ -544,6 +617,8 @@ int main() {
                 { "Destra", &kb.moveRight },
                 { "Salta", &kb.jump },
                 { "Interagisci (interruttori)", &kb.interact },
+                { "Ruota camera a sinistra", &kb.rotateLeft },
+                { "Ruota camera a destra", &kb.rotateRight },
                 { "Ricomincia livello", &kb.resetLevel },
                 { "Torna indietro / Esci dal livello", &kb.back },
                 { "Muta musica", &kb.toggleMusic },
@@ -559,37 +634,37 @@ int main() {
                 }
             }
 
-            float y = 120;
+            float y = 108;
             for (int i = 0; i < rowCount; i++) {
-                DrawText(rows[i].label, 60, (int)y + 10, 20, BLACK);
-                Rectangle keyBtn = { 460, y, 220, 42 };
+                DrawText(rows[i].label, 60, (int)y + 8, 18, BLACK);
+                Rectangle keyBtn = { 460, y, 220, 38 };
                 bool waiting = (rebindingIndex == i);
                 std::string label = waiting ? "Premi un tasto..." : KeyToName(*(rows[i].key));
-                if (DrawButton(keyBtn, label.c_str(), 18, waiting ? Fade(GOLD, 0.9f) : DARKBLUE,
+                if (DrawButton(keyBtn, label.c_str(), 16, waiting ? Fade(GOLD, 0.9f) : DARKBLUE,
                                waiting ? GOLD : BLUE, WHITE)) {
                     rebindingIndex = i;
                 }
-                y += 54;
+                y += 46;
             }
 
-            Rectangle resetBtn = { 60, y + 20, 260, 46 };
-            if (DrawButton(resetBtn, "RIPRISTINA PREDEFINITI", 18, DARKGRAY, GRAY, WHITE)) {
+            Rectangle resetBtn = { 60, y + 14, 260, 42 };
+            if (DrawButton(resetBtn, "RIPRISTINA PREDEFINITI", 16, DARKGRAY, GRAY, WHITE)) {
                 kb = KeyBindings{};
                 SaveKeyBindings("keybindings.json", kb);
                 rebindingIndex = -1;
             }
 
-            float sensY = y + 20;
-            DrawText("Sensibilita' rotazione camera:", 400, (int)sensY + 13, 20, BLACK);
-            Rectangle sensMinus = { 700, sensY, 46, 46 };
-            Rectangle sensPlus  = { 880, sensY, 46, 46 };
+            float sensY = y + 14;
+            DrawText("Velocita' rotazione camera:", 400, (int)sensY + 9, 18, BLACK);
+            Rectangle sensMinus = { 700, sensY, 42, 42 };
+            Rectangle sensPlus  = { 870, sensY, 42, 42 };
             if (DrawMiniButton(sensMinus, "-", LIGHTGRAY, GRAY)) {
                 kb.mouseSensitivity = std::max(0.2f, kb.mouseSensitivity - 0.1f);
                 SaveKeyBindings("keybindings.json", kb);
             }
             std::string sensVal = TextFormat("%.1fx", kb.mouseSensitivity);
-            int svw = MeasureText(sensVal.c_str(), 24);
-            DrawText(sensVal.c_str(), (int)(746 + (880 - 746) / 2 - svw / 2), (int)sensY + 11, 24, DARKBLUE);
+            int svw = MeasureText(sensVal.c_str(), 22);
+            DrawText(sensVal.c_str(), (int)(742 + (870 - 742) / 2 - svw / 2), (int)sensY + 10, 22, DARKBLUE);
             if (DrawMiniButton(sensPlus, "+", LIGHTGRAY, GRAY)) {
                 kb.mouseSensitivity = std::min(3.0f, kb.mouseSensitivity + 0.1f);
                 SaveKeyBindings("keybindings.json", kb);
@@ -627,6 +702,14 @@ int main() {
                 if (!IsVisibleToCamera(camera, o.position, radius)) continue;
                 DrawCube(o.position, o.size.x, o.size.y, o.size.z, o.color);
                 DrawCubeWires(o.position, o.size.x, o.size.y, o.size.z, DARKGRAY);
+            }
+            for (size_t i = 0; i < currentLevel.draggables.size(); i++) {
+                Vector3 dp = run.draggablePos[i];
+                Vector3 ds = currentLevel.draggables[i].size;
+                float radius = Vector3Length(Vector3Scale(ds, 0.5f));
+                if (!IsVisibleToCamera(camera, dp, radius)) continue;
+                DrawCube(dp, ds.x, ds.y, ds.z, currentLevel.draggables[i].color);
+                DrawCubeWires(dp, ds.x, ds.y, ds.z, BLACK);
             }
 
             for (size_t i = 0; i < currentLevel.switches.size(); i++) {
@@ -669,7 +752,14 @@ int main() {
             DrawText(TextFormat("Passo attuale: %d / %d", run.currentStep, (int)run.sequence.size()),
                       10, 80, 18, DARKBLUE);
             DrawText(TextFormat("Tempo: %s", FormatTime(run.elapsedTime).c_str()), 10, 102, 18, DARKGREEN);
-            DrawText("ESC: torna indietro   |   R: ricomincia   |   Tasto destro: ruota camera", 10, screenHeight - 26, 16, DARKGRAY);
+            DrawText("ESC: torna indietro   |   R: ricomincia", 10, screenHeight - 26, 16, DARKGRAY);
+
+            {
+                Rectangle rotLeftBtn = { screenWidth - 110.0f, screenHeight - 60.0f, 46, 46 };
+                Rectangle rotRightBtn = { screenWidth - 56.0f, screenHeight - 60.0f, 46, 46 };
+                if (DrawButton(rotLeftBtn, "<", 26, Fade(DARKBLUE, 0.75f), BLUE, WHITE)) run.targetCameraYaw += PI / 2.0f;
+                if (DrawButton(rotRightBtn, ">", 26, Fade(DARKBLUE, 0.75f), BLUE, WHITE)) run.targetCameraYaw -= PI / 2.0f;
+            }
 
             if (run.flashWrong) {
                 DrawText("SBAGLIATO! Riprova.", screenWidth / 2 - 100, 90, 24, RED);

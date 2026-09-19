@@ -145,6 +145,7 @@ bool LevelManager::LoadFromFile(const std::string& path, LevelData& out, std::st
             lvl.platforms.push_back(LevelBox{ Vector3{0, -0.25f, 0}, Vector3{40, 0.5f, 40}, LIGHTGRAY });
         }
         if (j.contains("obstacles")) lvl.obstacles = ParseBoxArray(j["obstacles"]);
+        if (j.contains("draggables")) lvl.draggables = ParseBoxArray(j["draggables"]);
 
         if (j.contains("doors") && j["doors"].is_array()) {
             for (const auto& d : j["doors"]) {
@@ -242,6 +243,7 @@ bool LevelManager::SaveToFile(const std::string& path, const LevelData& level, s
 
     j["platforms"] = BoxArrayToJson(level.platforms);
     j["obstacles"] = BoxArrayToJson(level.obstacles);
+    j["draggables"] = BoxArrayToJson(level.draggables);
 
     json doorsArr = json::array();
     for (const auto& d : level.doors) {

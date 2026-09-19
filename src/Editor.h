@@ -4,8 +4,8 @@
 #include <string>
 #include <vector>
 
-enum class EditorTool { SELECT, PLATFORM, OBSTACLE, SWITCH, START, DOOR, EXIT };
-enum class EditorSelType { NONE, PLATFORM, OBSTACLE, SWITCH, START, DOOR, EXIT };
+enum class EditorTool { SELECT, PLATFORM, OBSTACLE, DRAGGABLE, SWITCH, START, DOOR, EXIT };
+enum class EditorSelType { NONE, PLATFORM, OBSTACLE, DRAGGABLE, SWITCH, START, DOOR, EXIT };
 
 class LevelEditor {
 public:

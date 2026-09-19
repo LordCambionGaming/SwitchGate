@@ -110,6 +110,8 @@ bool LoadKeyBindings(const std::string& path, KeyBindings& out) {
     readKey("back", kb.back);
     readKey("toggle_music", kb.toggleMusic);
     readKey("interact", kb.interact);
+    readKey("rotate_left", kb.rotateLeft);
+    readKey("rotate_right", kb.rotateRight);
     if (j.contains("mouse_sensitivity") && j["mouse_sensitivity"].is_number()) {
         kb.mouseSensitivity = j["mouse_sensitivity"].get<float>();
     }
@@ -129,6 +131,8 @@ bool SaveKeyBindings(const std::string& path, const KeyBindings& kb) {
     j["back"] = KeyToName(kb.back);
     j["toggle_music"] = KeyToName(kb.toggleMusic);
     j["interact"] = KeyToName(kb.interact);
+    j["rotate_left"] = KeyToName(kb.rotateLeft);
+    j["rotate_right"] = KeyToName(kb.rotateRight);
     j["mouse_sensitivity"] = kb.mouseSensitivity;
 
     std::ofstream file(path);

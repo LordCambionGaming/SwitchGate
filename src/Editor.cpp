@@ -114,6 +114,12 @@ void LevelEditor::PickAt(Vector2 w) {
             selType = EditorSelType::DOOR; selIndex = i; return;
         }
     }
+    for (int i = (int)working.draggables.size() - 1; i >= 0; i--) {
+        const auto& d = working.draggables[i];
+        if (fabsf(d.position.x - w.x) <= d.size.x / 2.0f && fabsf(d.position.z - w.y) <= d.size.z / 2.0f) {
+            selType = EditorSelType::DRAGGABLE; selIndex = i; return;
+        }
+    }
     for (int i = (int)working.obstacles.size() - 1; i >= 0; i--) {
         const auto& o = working.obstacles[i];
         if (fabsf(o.position.x - w.x) <= o.size.x / 2.0f && fabsf(o.position.z - w.y) <= o.size.z / 2.0f) {
@@ -134,6 +140,8 @@ void LevelEditor::DeleteSelected() {
         working.platforms.erase(working.platforms.begin() + selIndex);
     } else if (selType == EditorSelType::OBSTACLE && selIndex >= 0 && selIndex < (int)working.obstacles.size()) {
         working.obstacles.erase(working.obstacles.begin() + selIndex);
+    } else if (selType == EditorSelType::DRAGGABLE && selIndex >= 0 && selIndex < (int)working.draggables.size()) {
+        working.draggables.erase(working.draggables.begin() + selIndex);
     } else if (selType == EditorSelType::DOOR && selIndex >= 0 && selIndex < (int)working.doors.size()) {
         working.doors.erase(working.doors.begin() + selIndex);
     } else if (selType == EditorSelType::SWITCH && selIndex >= 0 && selIndex < (int)working.switches.size()) {
@@ -205,6 +213,9 @@ void LevelEditor::Update() {
                     case EditorSelType::OBSTACLE:
                         if (selIndex >= 0) { ox = working.obstacles[selIndex].position.x; oz = working.obstacles[selIndex].position.z; }
                         break;
+                    case EditorSelType::DRAGGABLE:
+                        if (selIndex >= 0) { ox = working.draggables[selIndex].position.x; oz = working.draggables[selIndex].position.z; }
+                        break;
                     default: break;
                 }
                 dragOffsetWorld = { ox - mw.x, oz - mw.y };
@@ -228,6 +239,9 @@ void LevelEditor::Update() {
                 case EditorSelType::OBSTACLE:
                     if (selIndex >= 0) { working.obstacles[selIndex].position.x = nx; working.obstacles[selIndex].position.z = nz; }
                     break;
+                case EditorSelType::DRAGGABLE:
+                    if (selIndex >= 0) { working.draggables[selIndex].position.x = nx; working.draggables[selIndex].position.z = nz; }
+                    break;
                 default: break;
             }
         }
@@ -237,7 +251,7 @@ void LevelEditor::Update() {
             DeleteSelected();
         }
     }
-    else if (tool == EditorTool::PLATFORM || tool == EditorTool::OBSTACLE) {
+    else if (tool == EditorTool::PLATFORM || tool == EditorTool::OBSTACLE || tool == EditorTool::DRAGGABLE) {
         if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
             isDraggingNew = true;
             dragStartWorld = mw;
@@ -264,10 +278,14 @@ void LevelEditor::Update() {
                 box.size.y = 0.5f;
                 box.position.y = newPlatformTopY - 0.25f;
                 working.platforms.push_back(box);
-            } else {
+            } else if (tool == EditorTool::OBSTACLE) {
                 box.size.y = newObstacleHeight;
                 box.position.y = newObstacleHeight / 2.0f;
                 working.obstacles.push_back(box);
+            } else {
+                box.size.y = std::min(sizeX, sizeZ);
+                box.position.y = newPlatformTopY + box.size.y / 2.0f;
+                working.draggables.push_back(box);
             }
             }
         }
@@ -377,6 +395,7 @@ void LevelEditor::DrawSidebar() {
         { EditorTool::SELECT, "Seleziona / Sposta" },
         { EditorTool::PLATFORM, "Piattaforma" },
         { EditorTool::OBSTACLE, "Ostacolo (muro)" },
+        { EditorTool::DRAGGABLE, "Cassa trascinabile" },
         { EditorTool::SWITCH, "Interruttore" },
         { EditorTool::START, "Partenza" },
         { EditorTool::DOOR, "Porta" },
@@ -502,8 +521,9 @@ void LevelEditor::DrawSidebar() {
             if (DrawButton(del, "ELIMINA", 13, MAROON, RED, WHITE)) DeleteSelected();
             y += 30;
         }
-        else if ((selType == EditorSelType::PLATFORM || selType == EditorSelType::OBSTACLE)) {
-            std::vector<LevelBox>& list = (selType == EditorSelType::PLATFORM) ? working.platforms : working.obstacles;
+        else if ((selType == EditorSelType::PLATFORM || selType == EditorSelType::OBSTACLE || selType == EditorSelType::DRAGGABLE)) {
+            std::vector<LevelBox>& list = (selType == EditorSelType::PLATFORM) ? working.platforms
+                : (selType == EditorSelType::OBSTACLE) ? working.obstacles : working.draggables;
             if (selIndex >= 0 && selIndex < (int)list.size()) {
                 LevelBox& box = list[selIndex];
 
@@ -659,6 +679,15 @@ void LevelEditor::DrawCanvas() {
         DrawRectangleRec(r, Fade(o.color, 0.95f));
         DrawRectangleLinesEx(r, sel ? 3.0f : 1.5f, sel ? GOLD : BLACK);
     }
+    for (size_t i = 0; i < working.draggables.size(); i++) {
+        const auto& d = working.draggables[i];
+        Vector2 c = WorldToScreen(d.position.x, d.position.z);
+        Rectangle r = { c.x - d.size.x * scale / 2, c.y - d.size.z * scale / 2, d.size.x * scale, d.size.z * scale };
+        bool sel = (selType == EditorSelType::DRAGGABLE && selIndex == (int)i);
+        DrawRectangleRec(r, Fade(d.color, 0.95f));
+        DrawRectangleLinesEx(r, sel ? 3.0f : 2.0f, sel ? GOLD : ORANGE);
+        DrawText("T", (int)c.x - 4, (int)c.y - 7, 14, WHITE);
+    }
     for (size_t i = 0; i < working.doors.size(); i++) {
         const auto& d = working.doors[i];
         Vector3 eff = GetDoorEffectiveSize(d);
@@ -694,12 +723,13 @@ void LevelEditor::DrawCanvas() {
         DrawText("START", (int)c.x + 11, (int)c.y - 8, 12, MAROON);
     }
 
-    if (isDraggingNew && (tool == EditorTool::PLATFORM || tool == EditorTool::OBSTACLE)) {
+    if (isDraggingNew && (tool == EditorTool::PLATFORM || tool == EditorTool::OBSTACLE || tool == EditorTool::DRAGGABLE)) {
         Vector2 cur = ScreenToWorld(GetMousePosition());
         Vector2 a = WorldToScreen(dragStartWorld.x, dragStartWorld.y);
         Vector2 b = WorldToScreen(cur.x, cur.y);
         Rectangle r = { std::min(a.x, b.x), std::min(a.y, b.y), fabsf(b.x - a.x), fabsf(b.y - a.y) };
-        DrawRectangleLinesEx(r, 2, tool == EditorTool::PLATFORM ? DARKGREEN : MAROON);
+        Color previewColor = tool == EditorTool::PLATFORM ? DARKGREEN : (tool == EditorTool::OBSTACLE ? MAROON : ORANGE);
+        DrawRectangleLinesEx(r, 2, previewColor);
     }
 
     EndScissorMode();

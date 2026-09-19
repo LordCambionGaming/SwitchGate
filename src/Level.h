@@ -53,6 +53,7 @@ struct LevelData {
 
     std::vector<LevelBox> platforms;   // superfici su cui camminare/saltare (il "pavimento")
     std::vector<LevelBox> obstacles;   // muri pieni (bloccano il movimento orizzontale)
+    std::vector<LevelBox> draggables;  // casse che il giocatore puo' trascinare col mouse
 
     std::vector<LevelDoor> doors;
 

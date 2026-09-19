@@ -11,6 +11,8 @@ struct KeyBindings {
     int back = 256;      // ESCAPE
     int toggleMusic = 77;// M
     int interact = 69;   // E
+    int rotateLeft = 263;  // FRECCIA SINISTRA
+    int rotateRight = 262; // FRECCIA DESTRA
     float mouseSensitivity = 1.0f;
 };
 
