@@ -333,6 +333,7 @@ int main() {
     bool playtestFromEditor = false;
     int rebindingIndex = -1;
     float settingsScroll = 0.0f;
+    float helpScroll = 0.0f;
 
     LevelManager levelManager;
     levelManager.ScanDirectory("levels");
@@ -768,7 +769,9 @@ int main() {
             }
         }
         else if (state == GameState::HELP) {
-            DrawText("COME SI GIOCA", 40, 40, 32, DARKBLUE);
+            DrawText("COME SI GIOCA", 40, 30, 32, DARKBLUE);
+            DrawText("Usa la rotellina del mouse per scorrere l'elenco delle istruzioni.", 40, 70, 16, DARKGRAY);
+
             const char* lines[] = {
                 "- Muoviti con i tasti WASD (riassegnabili in IMPOSTAZIONI).",
                 "- SPAZIO per saltare (utile su piattaforme rialzate).",
@@ -791,13 +794,44 @@ int main() {
                 "",
                 "Puoi creare nuovi livelli con l'EDITOR LIVELLI dal menu principale,",
                 "oppure scrivendo a mano un file .json nella cartella 'levels/'.",
-                "Vedi il file README.md per lo schema completo con tutti i campi disponibili.",
             };
-            int y = 100;
-            for (const char* line : lines) {
-                DrawText(line, 40, y, 18, line[0] == '\0' ? RAYWHITE : DARKGRAY);
+            const int lineCount = (int)(sizeof(lines) / sizeof(lines[0]));
+
+            const float helpTop = 100.0f;
+            const float helpBottom = 610.0f;
+            Rectangle helpVisibleRect = { 0, helpTop, (float)screenWidth, helpBottom - helpTop };
+            if (CheckCollisionPointRec(GetMousePosition(), helpVisibleRect)) {
+                helpScroll -= GetMouseWheelMove() * 30.0f;
+            }
+            if (helpScroll < 0.0f) helpScroll = 0.0f;
+
+            g_uiScrollOffsetY = helpScroll;
+            BeginScissorMode((int)helpVisibleRect.x, (int)helpVisibleRect.y, (int)helpVisibleRect.width, (int)helpVisibleRect.height);
+            rlPushMatrix();
+            rlTranslatef(0, -helpScroll, 0);
+
+            float y = helpTop + 8.0f;
+            for (int i = 0; i < lineCount; i++) {
+                DrawText(lines[i], 60, (int)y, 18, lines[i][0] == '\0' ? RAYWHITE : DARKGRAY);
                 y += 28;
             }
+            float contentHeight = y - helpTop;
+
+            rlPopMatrix();
+            EndScissorMode();
+            g_uiScrollOffsetY = 0.0f;
+
+            float maxScroll = std::max(0.0f, contentHeight - (helpBottom - helpTop));
+            if (helpScroll > maxScroll) helpScroll = maxScroll;
+
+            if (maxScroll > 0.0f) {
+                Rectangle track = { screenWidth - 20.0f, helpTop, 6, helpBottom - helpTop };
+                DrawRectangleRec(track, Fade(LIGHTGRAY, 0.6f));
+                float thumbH = std::max(24.0f, track.height * (track.height / contentHeight));
+                float thumbY = track.y + (track.height - thumbH) * (helpScroll / maxScroll);
+                DrawRectangleRec(Rectangle{ track.x, thumbY, track.width, thumbH }, DARKGRAY);
+            }
+
             Rectangle backBtn = { 40, screenHeight - 80.0f, 200, 50 };
             if (DrawButton(backBtn, "INDIETRO", 20, DARKGRAY, GRAY, WHITE)) {
                 state = returnFromHelp;
