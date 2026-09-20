@@ -16,9 +16,9 @@
     { "position": [0, -0.25, 6], "size": [20, 0.5, 14], "color": "lightgray" },
     { "position": [-6, 1.0, -2],  "size": [4, 0.5, 4], "color": "gray" },
     { "position": [-3, 2.0, -4],  "size": [4, 0.5, 4], "color": "gray" },
-    { "position": [0,  3.0, -6],  "size": [4, 0.5, 4], "color": "darkgray" },
+    { "position": [0,  3.0, -6],  "size": [4, 0.5, 4], "color": "gray" },
     { "position": [3,  4.0, -8],  "size": [4, 0.5, 4], "color": "gray" },
-    { "position": [6,  5.0, -10], "size": [6, 0.5, 6], "color": "gold" }
+    { "position": [6,  5.0, -10], "size": [6, 0.5, 6], "color": "gray" }
   ],
   "obstacles": [],
   "doors": [ { "position": [6, 5, -13], "size": [4, 3, 0.5], "linked_switch": -1 } ],

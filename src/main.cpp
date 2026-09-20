@@ -172,6 +172,7 @@ struct RunState {
     std::vector<float> doorHeights;
     float flashTimer = 0.0f;
     bool flashWrong = false;
+    float hintTimer = 0.0f;
     Player player;
     float elapsedTime = 0.0f;
     int score = 0;
@@ -202,6 +203,7 @@ static void StartRun(RunState& run, const LevelData& level, std::mt19937& rng) {
     for (size_t i = 0; i < level.doors.size(); i++) run.doorHeights[i] = level.doors[i].size.y;
     run.padPressed.assign(level.pads.size(), false);
     run.flashTimer = 0.0f;
+    run.hintTimer = 0.0f;
     run.flashWrong = false;
     run.elapsedTime = 0.0f;
     run.score = 0;
@@ -219,6 +221,20 @@ static void StartRun(RunState& run, const LevelData& level, std::mt19937& rng) {
 // Genera una texture procedurale in stile "cassa di legno" (assi orizzontali
 // e rinforzi incrociati), su base quasi neutra cosi' che il tint per-cassa
 // (il colore scelto nell'editor) resti ben leggibile sopra il disegno.
+static std::string ColorToDisplayName(Color c) {
+    struct Named { const char* name; Color color; };
+    static const Named table[] = {
+        { "ROSSO", RED }, { "BLU", BLUE }, { "VERDE", GREEN }, { "GIALLO", YELLOW },
+        { "ARANCIONE", ORANGE }, { "VIOLA", PURPLE }, { "ROSA", PINK }, { "ORO", GOLD },
+        { "LIME", LIME }, { "AZZURRO", SKYBLUE }, { "GRIGIO CHIARO", LIGHTGRAY },
+        { "GRIGIO", GRAY }, { "GRIGIO SCURO", DARKGRAY }, { "MARRONE", BROWN },
+    };
+    for (const auto& n : table) {
+        if (n.color.r == c.r && n.color.g == c.g && n.color.b == c.b && n.color.a == c.a) return n.name;
+    }
+    return "?";
+}
+
 static Texture2D GenerateCrateTexture() {
     const int size = 128;
     Image img = GenImageColor(size, size, Color{ 215, 205, 188, 255 });
@@ -434,6 +450,8 @@ int main() {
             }
 
             if (run.flashTimer > 0.0f) run.flashTimer -= dt; else run.flashWrong = false;
+            if (!run.solved && IsKeyPressed(kb.hint)) run.hintTimer = 3.0f;
+            if (run.hintTimer > 0.0f) run.hintTimer -= dt;
 
             for (size_t i = 0; i < currentLevel.pads.size(); i++) {
                 const LevelPad& pad = currentLevel.pads[i];
@@ -629,6 +647,7 @@ int main() {
                 "- SPAZIO per saltare (utile su piattaforme rialzate).",
                 "- Frecce SINISTRA/DESTRA, click sinistro/destro del mouse, o i pulsanti in basso a destra: ruota la camera di 90 gradi.",
                 "- Cammina addosso a un interruttore e premi E per attivarlo, nell'ordine mostrato in alto.",
+                "- H: mostra per qualche secondo quale interruttore premere adesso.",
                 "- Cammina contro le casse arancioni per spingerle, lungo una delle 4 direzioni.",
                 "- Devi essere abbastanza vicino a un interruttore per attivarlo.",
                 "- Sbagliando l'ordine il progresso del livello si azzera.",
@@ -638,6 +657,10 @@ int main() {
                 "- R: ricomincia il livello corrente (nuova sequenza se e' casuale).",
                 "- ESC: torna alla selezione dei livelli.",
                 "- M: attiva/disattiva la musica del menu.",
+                "",
+                "",
+                "In IMPOSTAZIONI puoi attivare la modalita' daltonici: mostra il nome",
+                "del colore anche su casse e pedane, non solo sugli interruttori.",
                 "",
                 "Puoi creare nuovi livelli con l'EDITOR LIVELLI dal menu principale,",
                 "oppure scrivendo a mano un file .json nella cartella 'levels/'.",
@@ -667,6 +690,7 @@ int main() {
                 { "Interagisci (interruttori)", &kb.interact },
                 { "Ruota camera a sinistra", &kb.rotateLeft },
                 { "Ruota camera a destra", &kb.rotateRight },
+                { "Suggerimento", &kb.hint },
                 { "Ricomincia livello", &kb.resetLevel },
                 { "Torna indietro / Esci dal livello", &kb.back },
                 { "Muta musica", &kb.toggleMusic },
@@ -731,7 +755,20 @@ int main() {
                 SaveKeyBindings("keybindings.json", kb);
             }
 
-            y = sensY + 14.0f;
+            y = sensY + 56.0f;
+            {
+                Rectangle cbBtn = { 60, y, 460, 42 };
+                std::string cbLabel = std::string("Modalita' daltonici: ") + (kb.colorblindMode ? "ON" : "OFF");
+                if (DrawButton(cbBtn, cbLabel.c_str(), 16, kb.colorblindMode ? DARKGREEN : DARKGRAY,
+                               kb.colorblindMode ? GREEN : GRAY, WHITE)) {
+                    kb.colorblindMode = !kb.colorblindMode;
+                    SaveKeyBindings("keybindings.json", kb);
+                }
+                DrawText("Mostra il nome del colore anche su casse e pedane, non solo sugli interruttori.",
+                          540, (int)y + 13, 14, DARKGRAY);
+            }
+
+            y += 14.0f;
             float contentHeight = y - settingsTop;
 
             rlPopMatrix();
@@ -824,6 +861,51 @@ int main() {
             DrawSphereWires(run.player.position, run.player.radius, 8, 8, MAROON);
 
             EndMode3D();
+
+            // Il nome dell'interruttore, proiettato sopra di esso, aiuta chiunque
+            // a capire subito quale sia senza dover fare affidamento solo sul
+            // colore (utile in generale, essenziale per chi ha discromatopsie).
+            for (size_t i = 0; i < currentLevel.switches.size(); i++) {
+                Vector3 labelPos = Vector3Add(currentLevel.switches[i].position, Vector3{ 0, 0.9f, 0 });
+                Vector2 sp = GetWorldToScreen(labelPos, camera);
+                if (sp.x < -100 || sp.x > screenWidth + 100 || sp.y < -100 || sp.y > screenHeight + 100) continue;
+                const char* label = currentLevel.switches[i].name.c_str();
+                int tw = MeasureText(label, 16);
+                DrawText(label, (int)sp.x - tw / 2 + 1, (int)sp.y + 1, 16, BLACK);
+                DrawText(label, (int)sp.x - tw / 2, (int)sp.y, 16, run.activated[i] ? GREEN : WHITE);
+            }
+
+            if (kb.colorblindMode) {
+                for (size_t i = 0; i < currentLevel.draggables.size(); i++) {
+                    std::string label = ColorToDisplayName(currentLevel.draggables[i].color);
+                    Vector3 labelPos = Vector3Add(run.draggablePos[i], Vector3{ 0, currentLevel.draggables[i].size.y / 2.0f + 0.3f, 0 });
+                    Vector2 sp = GetWorldToScreen(labelPos, camera);
+                    if (sp.x < -100 || sp.x > screenWidth + 100 || sp.y < -100 || sp.y > screenHeight + 100) continue;
+                    int tw = MeasureText(label.c_str(), 16);
+                    DrawText(label.c_str(), (int)sp.x - tw / 2 + 1, (int)sp.y + 1, 16, BLACK);
+                    DrawText(label.c_str(), (int)sp.x - tw / 2, (int)sp.y, 16, WHITE);
+                }
+                for (size_t i = 0; i < currentLevel.pads.size(); i++) {
+                    std::string label = ColorToDisplayName(currentLevel.pads[i].color);
+                    Vector2 sp = GetWorldToScreen(currentLevel.pads[i].position, camera);
+                    if (sp.x < -100 || sp.x > screenWidth + 100 || sp.y < -100 || sp.y > screenHeight + 100) continue;
+                    int tw = MeasureText(label.c_str(), 14);
+                    DrawText(label.c_str(), (int)sp.x - tw / 2 + 1, (int)sp.y + 1, 14, BLACK);
+                    DrawText(label.c_str(), (int)sp.x - tw / 2, (int)sp.y, 14, WHITE);
+                }
+            }
+
+            if (run.hintTimer > 0.0f && !run.solved && run.currentStep < (int)run.sequence.size()) {
+                int targetIdx = run.sequence[run.currentStep];
+                Vector3 targetPos = currentLevel.switches[targetIdx].position;
+                float bounce = 1.6f + 0.2f * sinf((float)GetTime() * 6.0f);
+                Vector3 arrowPos = Vector3Add(targetPos, Vector3{ 0, bounce, 0 });
+                Vector2 sp = GetWorldToScreen(arrowPos, camera);
+                DrawText("v", (int)sp.x - 6, (int)sp.y - 12, 28, GOLD);
+                std::string hintText = "Prossimo: " + currentLevel.switches[targetIdx].name;
+                int htw = MeasureText(hintText.c_str(), 20);
+                DrawText(hintText.c_str(), screenWidth / 2 - htw / 2, 120, 20, GOLD);
+            }
 
             // --- HUD ---
             DrawText(currentLevel.name.c_str(), 10, 10, 22, DARKBLUE);

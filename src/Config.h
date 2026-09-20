@@ -13,7 +13,9 @@ struct KeyBindings {
     int interact = 69;   // E
     int rotateLeft = 263;  // FRECCIA SINISTRA
     int rotateRight = 262; // FRECCIA DESTRA
+    int hint = 72;          // H
     float mouseSensitivity = 1.0f;
+    bool colorblindMode = false;
 };
 
 // Nome leggibile di un tasto (es. 341 -> "LEFT_CONTROL", 65 -> "A").
