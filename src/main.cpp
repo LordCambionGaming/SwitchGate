@@ -181,6 +181,7 @@ struct RunState {
 
     std::vector<Vector3> draggablePos;
     std::vector<Vector3> draggableVel;
+    std::vector<bool> padPressed;
 };
 
 static void StartRun(RunState& run, const LevelData& level, std::mt19937& rng) {
@@ -199,6 +200,7 @@ static void StartRun(RunState& run, const LevelData& level, std::mt19937& rng) {
     run.won = false;
     run.doorHeights.resize(level.doors.size());
     for (size_t i = 0; i < level.doors.size(); i++) run.doorHeights[i] = level.doors[i].size.y;
+    run.padPressed.assign(level.pads.size(), false);
     run.flashTimer = 0.0f;
     run.flashWrong = false;
     run.elapsedTime = 0.0f;
@@ -214,9 +216,25 @@ static void StartRun(RunState& run, const LevelData& level, std::mt19937& rng) {
     run.player.onGround = false;
 }
 
+// Genera una texture procedurale in stile "cassa di legno" (assi orizzontali
+// e rinforzi incrociati), su base quasi neutra cosi' che il tint per-cassa
+// (il colore scelto nell'editor) resti ben leggibile sopra il disegno.
+static Texture2D GenerateCrateTexture() {
+    const int size = 128;
+    Image img = GenImageColor(size, size, Color{ 215, 205, 188, 255 });
+    Color plank = Color{ 150, 138, 118, 255 };
+    Color darkEdge = Color{ 100, 90, 75, 255 };
 
-// MAIN
+    ImageDrawRectangleLines(&img, Rectangle{ 0, 0, (float)size, (float)size }, 6, darkEdge);
+    int step = size / 4;
+    for (int y = step; y < size; y += step) ImageDrawLineEx(&img, Vector2{ 0, (float)y }, Vector2{ (float)size, (float)y }, 3, plank);
+    ImageDrawLineEx(&img, Vector2{ 0, 0 }, Vector2{ (float)size, (float)size }, 4, plank);
+    ImageDrawLineEx(&img, Vector2{ (float)size, 0 }, Vector2{ 0, (float)size }, 4, plank);
 
+    Texture2D tex = LoadTextureFromImage(img);
+    UnloadImage(img);
+    return tex;
+}
 
 int main() {
     const int screenWidth = 1280;
@@ -226,6 +244,10 @@ int main() {
     rlEnableBackfaceCulling();
     SetExitKey(KEY_NULL);
     SetTargetFPS(60);
+
+    Texture2D crateTexture = GenerateCrateTexture();
+    Model crateModel = LoadModelFromMesh(GenMeshCube(1.0f, 1.0f, 1.0f));
+    SetMaterialTexture(&crateModel.materials[0], MATERIAL_MAP_DIFFUSE, crateTexture);
 
     InitAudioDevice();
     const char* musicPath = "assets/audio/menu_theme.mp3";
@@ -259,6 +281,7 @@ int main() {
     editor.NewLevel();
     bool playtestFromEditor = false;
     int rebindingIndex = -1;
+    float settingsScroll = 0.0f;
 
     LevelManager levelManager;
     levelManager.ScanDirectory("levels");
@@ -293,6 +316,17 @@ int main() {
         if (state == GameState::PLAYING) {
             if (IsKeyPressed(kb.rotateLeft)) run.targetCameraYaw += PI / 2.0f;
             if (IsKeyPressed(kb.rotateRight)) run.targetCameraYaw -= PI / 2.0f;
+
+            {
+                Rectangle rotLeftBtn = { screenWidth - 110.0f, screenHeight - 60.0f, 46, 46 };
+                Rectangle rotRightBtn = { screenWidth - 56.0f, screenHeight - 60.0f, 46, 46 };
+                Vector2 mousePos = GetMousePosition();
+                bool onRotButton = CheckCollisionPointRec(mousePos, rotLeftBtn) || CheckCollisionPointRec(mousePos, rotRightBtn);
+                if (!onRotButton && !run.won) {
+                    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) run.targetCameraYaw += PI / 2.0f;
+                    if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) run.targetCameraYaw -= PI / 2.0f;
+                }
+            }
 
             // Anima la camera verso l'angolo scelto (multiplo di 90 gradi),
             // prendendo sempre il verso piu' breve.
@@ -333,24 +367,17 @@ int main() {
             for (size_t i = 0; i < run.draggablePos.size(); i++) {
                 Vector3& cratePos = run.draggablePos[i];
                 Vector3 crateSize = currentLevel.draggables[i].size;
-                float minX = cratePos.x - crateSize.x / 2.0f - run.player.radius;
-                float maxX = cratePos.x + crateSize.x / 2.0f + run.player.radius;
-                float minZ = cratePos.z - crateSize.z / 2.0f - run.player.radius;
-                float maxZ = cratePos.z + crateSize.z / 2.0f + run.player.radius;
+                float dx = cratePos.x - run.player.position.x;
+                float dz = cratePos.z - run.player.position.z;
+                float overlapX = (crateSize.x / 2.0f + run.player.radius) - fabsf(dx);
+                float overlapZ = (crateSize.z / 2.0f + run.player.radius) - fabsf(dz);
 
-                if (run.player.position.x > minX && run.player.position.x < maxX &&
-                    run.player.position.z > minZ && run.player.position.z < maxZ) {
-                    float overlapLeft = run.player.position.x - minX, overlapRight = maxX - run.player.position.x;
-                    float overlapBack = run.player.position.z - minZ, overlapFront = maxZ - run.player.position.z;
-                    float minOverlapX = std::min(overlapLeft, overlapRight);
-                    float minOverlapZ = std::min(overlapBack, overlapFront);
-
-                    float pushX = 0.0f, pushZ = 0.0f;
-                    if (minOverlapX < minOverlapZ) pushX = (overlapLeft < overlapRight) ? -minOverlapX : minOverlapX;
-                    else pushZ = (overlapBack < overlapFront) ? -minOverlapZ : minOverlapZ;
-
-                    cratePos.x += pushX;
-                    cratePos.z += pushZ;
+                if (overlapX > 0.0f && overlapZ > 0.0f) {
+                    if (overlapX < overlapZ) {
+                        cratePos.x += (dx >= 0.0f) ? overlapX : -overlapX;
+                    } else {
+                        cratePos.z += (dz >= 0.0f) ? overlapZ : -overlapZ;
+                    }
 
                     // La cassa non puo' essere spinta dentro un muro o una porta chiusa.
                     float crateRadius = std::max(crateSize.x, crateSize.z) / 2.0f;
@@ -408,11 +435,32 @@ int main() {
 
             if (run.flashTimer > 0.0f) run.flashTimer -= dt; else run.flashWrong = false;
 
+            for (size_t i = 0; i < currentLevel.pads.size(); i++) {
+                const LevelPad& pad = currentLevel.pads[i];
+                bool pressed = false;
+                for (size_t k = 0; k < run.draggablePos.size(); k++) {
+                    const Color& cc = currentLevel.draggables[k].color;
+                    if (cc.r != pad.color.r || cc.g != pad.color.g || cc.b != pad.color.b) continue;
+                    const Vector3& cp = run.draggablePos[k];
+                    bool overXZ = fabsf(cp.x - pad.position.x) <= pad.size.x / 2.0f &&
+                                  fabsf(cp.z - pad.position.z) <= pad.size.z / 2.0f;
+                    bool onTop = fabsf((cp.y - currentLevel.draggables[k].size.y / 2.0f) - pad.position.y) < 0.3f;
+                    if (overXZ && onTop) { pressed = true; break; }
+                }
+                run.padPressed[i] = pressed;
+            }
+
+            std::vector<bool> doorOpenedByPad(currentLevel.doors.size(), false);
+            for (size_t i = 0; i < currentLevel.pads.size(); i++) {
+                int ld = currentLevel.pads[i].linkedDoor;
+                if (run.padPressed[i] && ld >= 0 && ld < (int)doorOpenedByPad.size()) doorOpenedByPad[ld] = true;
+            }
+
             for (size_t i = 0; i < currentLevel.doors.size(); i++) {
                 const LevelDoor& door = currentLevel.doors[i];
-                bool shouldBeOpen = (door.linkedSwitch < 0)
+                bool shouldBeOpen = doorOpenedByPad[i] || ((door.linkedSwitch < 0)
                     ? run.solved
-                    : (door.linkedSwitch < (int)run.activated.size() && run.activated[door.linkedSwitch]);
+                    : (door.linkedSwitch < (int)run.activated.size() && run.activated[door.linkedSwitch]));
                 float target = shouldBeOpen ? 0.0f : door.size.y;
                 float speed = dt * 2.0f;
                 if (run.doorHeights[i] < target) run.doorHeights[i] = std::min(target, run.doorHeights[i] + speed);
@@ -579,7 +627,7 @@ int main() {
             const char* lines[] = {
                 "- Muoviti con i tasti WASD (riassegnabili in IMPOSTAZIONI).",
                 "- SPAZIO per saltare (utile su piattaforme rialzate).",
-                "- Frecce SINISTRA/DESTRA (o i pulsanti in basso a destra): ruota la camera di 90 gradi.",
+                "- Frecce SINISTRA/DESTRA, click sinistro/destro del mouse, o i pulsanti in basso a destra: ruota la camera di 90 gradi.",
                 "- Cammina addosso a un interruttore e premi E per attivarlo, nell'ordine mostrato in alto.",
                 "- Cammina contro le casse arancioni per spingerle, lungo una delle 4 direzioni.",
                 "- Devi essere abbastanza vicino a un interruttore per attivarlo.",
@@ -634,7 +682,20 @@ int main() {
                 }
             }
 
-            float y = 108;
+            const float settingsTop = 100.0f;
+            const float settingsBottom = 610.0f;
+            Rectangle settingsVisibleRect = { 0, settingsTop, (float)screenWidth, settingsBottom - settingsTop };
+            if (CheckCollisionPointRec(GetMousePosition(), settingsVisibleRect)) {
+                settingsScroll -= GetMouseWheelMove() * 30.0f;
+            }
+            if (settingsScroll < 0.0f) settingsScroll = 0.0f;
+
+            g_uiScrollOffsetY = settingsScroll;
+            BeginScissorMode((int)settingsVisibleRect.x, (int)settingsVisibleRect.y, (int)settingsVisibleRect.width, (int)settingsVisibleRect.height);
+            rlPushMatrix();
+            rlTranslatef(0, -settingsScroll, 0);
+
+            float y = settingsTop + 8.0f;
             for (int i = 0; i < rowCount; i++) {
                 DrawText(rows[i].label, 60, (int)y + 8, 18, BLACK);
                 Rectangle keyBtn = { 460, y, 220, 38 };
@@ -668,6 +729,24 @@ int main() {
             if (DrawMiniButton(sensPlus, "+", LIGHTGRAY, GRAY)) {
                 kb.mouseSensitivity = std::min(3.0f, kb.mouseSensitivity + 0.1f);
                 SaveKeyBindings("keybindings.json", kb);
+            }
+
+            y = sensY + 14.0f;
+            float contentHeight = y - settingsTop;
+
+            rlPopMatrix();
+            EndScissorMode();
+            g_uiScrollOffsetY = 0.0f;
+
+            float maxScroll = std::max(0.0f, contentHeight - (settingsBottom - settingsTop));
+            if (settingsScroll > maxScroll) settingsScroll = maxScroll;
+
+            if (maxScroll > 0.0f) {
+                Rectangle track = { screenWidth - 20.0f, settingsTop, 6, settingsBottom - settingsTop };
+                DrawRectangleRec(track, Fade(LIGHTGRAY, 0.6f));
+                float thumbH = std::max(24.0f, track.height * (track.height / contentHeight));
+                float thumbY = track.y + (track.height - thumbH) * (settingsScroll / maxScroll);
+                DrawRectangleRec(Rectangle{ track.x, thumbY, track.width, thumbH }, DARKGRAY);
             }
 
             Rectangle backBtn = { 40, screenHeight - 80.0f, 200, 50 };
@@ -708,8 +787,16 @@ int main() {
                 Vector3 ds = currentLevel.draggables[i].size;
                 float radius = Vector3Length(Vector3Scale(ds, 0.5f));
                 if (!IsVisibleToCamera(camera, dp, radius)) continue;
-                DrawCube(dp, ds.x, ds.y, ds.z, currentLevel.draggables[i].color);
+                DrawModelEx(crateModel, dp, Vector3{ 0, 1, 0 }, 0.0f, ds, currentLevel.draggables[i].color);
                 DrawCubeWires(dp, ds.x, ds.y, ds.z, BLACK);
+            }
+
+            for (size_t i = 0; i < currentLevel.pads.size(); i++) {
+                const LevelPad& pad = currentLevel.pads[i];
+                if (!IsVisibleToCamera(camera, pad.position, pad.size.x)) continue;
+                Color c = run.padPressed[i] ? pad.color : Fade(pad.color, 0.45f);
+                DrawCube(pad.position, pad.size.x, pad.size.y, pad.size.z, c);
+                DrawCubeWires(pad.position, pad.size.x, pad.size.y, pad.size.z, DARKGRAY);
             }
 
             for (size_t i = 0; i < currentLevel.switches.size(); i++) {
@@ -800,6 +887,7 @@ int main() {
 
     if (hasMusic) UnloadMusicStream(menuMusic);
     CloseAudioDevice();
+    UnloadModel(crateModel); // libera anche crateTexture, assegnata al suo materiale
     CloseWindow();
     return 0;
 }

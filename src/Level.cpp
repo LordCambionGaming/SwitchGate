@@ -146,6 +146,16 @@ bool LevelManager::LoadFromFile(const std::string& path, LevelData& out, std::st
         }
         if (j.contains("obstacles")) lvl.obstacles = ParseBoxArray(j["obstacles"]);
         if (j.contains("draggables")) lvl.draggables = ParseBoxArray(j["draggables"]);
+        if (j.contains("pads") && j["pads"].is_array()) {
+            for (const auto& p : j["pads"]) {
+                LevelPad pad;
+                if (p.contains("position")) pad.position = ParseVec3(p["position"], pad.position);
+                if (p.contains("size")) pad.size = ParseVec3(p["size"], pad.size);
+                if (p.contains("color")) pad.color = ParseColor(p["color"], pad.color);
+                if (p.contains("linked_door")) pad.linkedDoor = p["linked_door"].get<int>();
+                lvl.pads.push_back(pad);
+            }
+        }
 
         if (j.contains("doors") && j["doors"].is_array()) {
             for (const auto& d : j["doors"]) {
@@ -244,6 +254,16 @@ bool LevelManager::SaveToFile(const std::string& path, const LevelData& level, s
     j["platforms"] = BoxArrayToJson(level.platforms);
     j["obstacles"] = BoxArrayToJson(level.obstacles);
     j["draggables"] = BoxArrayToJson(level.draggables);
+    json padsArr = json::array();
+    for (const auto& p : level.pads) {
+        padsArr.push_back({
+            { "position", Vec3ToJson(p.position) },
+            { "size", Vec3ToJson(p.size) },
+            { "color", ColorToJson(p.color) },
+            { "linked_door", p.linkedDoor }
+        });
+    }
+    j["pads"] = padsArr;
 
     json doorsArr = json::array();
     for (const auto& d : level.doors) {

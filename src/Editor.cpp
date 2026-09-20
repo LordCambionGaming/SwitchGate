@@ -114,6 +114,12 @@ void LevelEditor::PickAt(Vector2 w) {
             selType = EditorSelType::DOOR; selIndex = i; return;
         }
     }
+    for (int i = (int)working.pads.size() - 1; i >= 0; i--) {
+        const auto& p = working.pads[i];
+        if (fabsf(p.position.x - w.x) <= p.size.x / 2.0f && fabsf(p.position.z - w.y) <= p.size.z / 2.0f) {
+            selType = EditorSelType::PAD; selIndex = i; return;
+        }
+    }
     for (int i = (int)working.draggables.size() - 1; i >= 0; i--) {
         const auto& d = working.draggables[i];
         if (fabsf(d.position.x - w.x) <= d.size.x / 2.0f && fabsf(d.position.z - w.y) <= d.size.z / 2.0f) {
@@ -142,8 +148,14 @@ void LevelEditor::DeleteSelected() {
         working.obstacles.erase(working.obstacles.begin() + selIndex);
     } else if (selType == EditorSelType::DRAGGABLE && selIndex >= 0 && selIndex < (int)working.draggables.size()) {
         working.draggables.erase(working.draggables.begin() + selIndex);
+    } else if (selType == EditorSelType::PAD && selIndex >= 0 && selIndex < (int)working.pads.size()) {
+        working.pads.erase(working.pads.begin() + selIndex);
     } else if (selType == EditorSelType::DOOR && selIndex >= 0 && selIndex < (int)working.doors.size()) {
         working.doors.erase(working.doors.begin() + selIndex);
+        for (auto& pad : working.pads) {
+            if (pad.linkedDoor == selIndex) pad.linkedDoor = -1;
+            else if (pad.linkedDoor > selIndex) pad.linkedDoor--;
+        }
     } else if (selType == EditorSelType::SWITCH && selIndex >= 0 && selIndex < (int)working.switches.size()) {
         if (working.switches.size() <= 1) { SetStatus("Deve rimanere almeno un interruttore.", true); return; }
         working.switches.erase(working.switches.begin() + selIndex);
@@ -216,6 +228,9 @@ void LevelEditor::Update() {
                     case EditorSelType::DRAGGABLE:
                         if (selIndex >= 0) { ox = working.draggables[selIndex].position.x; oz = working.draggables[selIndex].position.z; }
                         break;
+                    case EditorSelType::PAD:
+                        if (selIndex >= 0) { ox = working.pads[selIndex].position.x; oz = working.pads[selIndex].position.z; }
+                        break;
                     default: break;
                 }
                 dragOffsetWorld = { ox - mw.x, oz - mw.y };
@@ -241,6 +256,9 @@ void LevelEditor::Update() {
                     break;
                 case EditorSelType::DRAGGABLE:
                     if (selIndex >= 0) { working.draggables[selIndex].position.x = nx; working.draggables[selIndex].position.z = nz; }
+                    break;
+                case EditorSelType::PAD:
+                    if (selIndex >= 0) { working.pads[selIndex].position.x = nx; working.pads[selIndex].position.z = nz; }
                     break;
                 default: break;
             }
@@ -323,6 +341,19 @@ void LevelEditor::Update() {
             tool = EditorTool::SELECT;
         }
     }
+    else if (tool == EditorTool::PAD) {
+        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && inCanvas) {
+            LevelPad pad;
+            pad.position = Vector3{ mw.x, newPlatformTopY + 0.05f, mw.y };
+            pad.size = Vector3{ 1.5f, 0.1f, 1.5f };
+            pad.color = kPalette[colorIndex].second;
+            pad.linkedDoor = -1;
+            working.pads.push_back(pad);
+            selType = EditorSelType::PAD;
+            selIndex = (int)working.pads.size() - 1;
+            tool = EditorTool::SELECT;
+        }
+    }
     else if (tool == EditorTool::EXIT) {
         if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && inCanvas) {
             working.exitPosition.x = mw.x;
@@ -399,6 +430,7 @@ void LevelEditor::DrawSidebar() {
         { EditorTool::SWITCH, "Interruttore" },
         { EditorTool::START, "Partenza" },
         { EditorTool::DOOR, "Porta" },
+        { EditorTool::PAD, "Pedana a colore" },
         { EditorTool::EXIT, "Uscita" },
     };
     for (auto& tb : tools) {
@@ -610,6 +642,40 @@ void LevelEditor::DrawSidebar() {
             if (DrawButton(del, "ELIMINA", 13, MAROON, RED, WHITE)) DeleteSelected();
             y += 30;
         }
+        else if (selType == EditorSelType::PAD && selIndex >= 0 && selIndex < (int)working.pads.size()) {
+            LevelPad& pad = working.pads[selIndex];
+            DrawText("Colore pedana (deve combaciare con una cassa):", (int)x, (int)y, 10, DARKGRAY); y += 16;
+            {
+                int curIdx = 0;
+                for (size_t i = 0; i < kPalette.size(); i++) if (ColorsEq(kPalette[i].second, pad.color)) { curIdx = (int)i; break; }
+                Rectangle prevBtn = { x, y, 28, 24 }, swatch = { x + 32, y, w - 92, 24 }, nextBtn = { x + w - 28, y, 28, 24 };
+                if (DrawMiniButton(prevBtn, "<", LIGHTGRAY, GRAY)) { curIdx = (curIdx - 1 + (int)kPalette.size()) % (int)kPalette.size(); pad.color = kPalette[curIdx].second; }
+                DrawRectangleRec(swatch, pad.color); DrawRectangleLinesEx(swatch, 1, BLACK);
+                if (DrawMiniButton(nextBtn, ">", LIGHTGRAY, GRAY)) { curIdx = (curIdx + 1) % (int)kPalette.size(); pad.color = kPalette[curIdx].second; }
+                y += 30;
+            }
+
+            DrawText("Apre la porta:", (int)x, (int)y, 11, DARKGRAY); y += 14;
+            {
+                std::string label = (pad.linkedDoor < 0 || pad.linkedDoor >= (int)working.doors.size())
+                    ? "Nessuna"
+                    : ("Porta " + std::to_string(pad.linkedDoor + 1));
+                Rectangle m = { x, y, 28, 24 }, p = { x + w - 28, y, 28, 24 };
+                int n = (int)working.doors.size();
+                if (DrawMiniButton(m, "<", LIGHTGRAY, GRAY)) {
+                    pad.linkedDoor = (pad.linkedDoor <= -1) ? (n - 1) : (pad.linkedDoor - 1);
+                }
+                DrawText(label.c_str(), (int)(x + w / 2 - MeasureText(label.c_str(), 13) / 2), (int)y + 5, 13, BLACK);
+                if (DrawMiniButton(p, ">", LIGHTGRAY, GRAY)) {
+                    pad.linkedDoor = (pad.linkedDoor >= n - 1) ? -1 : (pad.linkedDoor + 1);
+                }
+                y += 28;
+            }
+
+            Rectangle del2 = { x, y, w, 26 };
+            if (DrawButton(del2, "ELIMINA", 13, MAROON, RED, WHITE)) DeleteSelected();
+            y += 30;
+        }
         else if (selType == EditorSelType::EXIT) {
             DrawText("Raggio uscita:", (int)x, (int)y, 11, DARKGRAY); y += 14;
             Rectangle m = { x, y, 28, 24 }, p = { x + w - 28, y, 28, 24 };
@@ -687,6 +753,17 @@ void LevelEditor::DrawCanvas() {
         DrawRectangleRec(r, Fade(d.color, 0.95f));
         DrawRectangleLinesEx(r, sel ? 3.0f : 2.0f, sel ? GOLD : ORANGE);
         DrawText("T", (int)c.x - 4, (int)c.y - 7, 14, WHITE);
+    }
+    for (size_t i = 0; i < working.pads.size(); i++) {
+        const auto& p = working.pads[i];
+        Vector2 c = WorldToScreen(p.position.x, p.position.z);
+        Rectangle r = { c.x - p.size.x * scale / 2, c.y - p.size.z * scale / 2, p.size.x * scale, p.size.z * scale };
+        bool sel = (selType == EditorSelType::PAD && selIndex == (int)i);
+        DrawRectangleRec(r, Fade(p.color, 0.5f));
+        DrawRectangleLinesEx(r, sel ? 3.0f : 1.5f, sel ? GOLD : DARKGRAY);
+        if (p.linkedDoor >= 0 && p.linkedDoor < (int)working.doors.size()) {
+            DrawText(TextFormat("->P%d", p.linkedDoor + 1), (int)c.x - 12, (int)c.y - 6, 12, DARKBLUE);
+        }
     }
     for (size_t i = 0; i < working.doors.size(); i++) {
         const auto& d = working.doors[i];

@@ -38,6 +38,16 @@ inline Vector3 GetDoorEffectiveSize(const LevelDoor& door) {
     return Vector3{ door.size.z, door.size.y, door.size.x };
 }
 
+// Una pedana a pressione: si attiva quando una cassa trascinabile dello
+// stesso colore ci si ferma sopra, e in quel caso puo' aprire una porta
+// collegata (linkedDoor = indice in LevelData::doors, -1 = nessun effetto).
+struct LevelPad {
+    Vector3 position{ 0, 0.05f, 0 };
+    Vector3 size{ 1.5f, 0.1f, 1.5f };
+    Color color = RED;
+    int linkedDoor = -1;
+};
+
 // Tutti i dati che descrivono un livello giocabile.
 struct LevelData {
     std::string filePath;              // percorso del file .json di origine
@@ -54,6 +64,7 @@ struct LevelData {
     std::vector<LevelBox> platforms;   // superfici su cui camminare/saltare (il "pavimento")
     std::vector<LevelBox> obstacles;   // muri pieni (bloccano il movimento orizzontale)
     std::vector<LevelBox> draggables;  // casse che il giocatore puo' trascinare col mouse
+    std::vector<LevelPad> pads;        // pedane a colore che aprono porte collegate
 
     std::vector<LevelDoor> doors;
 
