@@ -61,7 +61,14 @@ void LevelEditor::NewLevel() {
     working.platforms.push_back(LevelBox{ Vector3{ 0, -0.25f, 0 }, Vector3{ 20, 0.5f, 20 }, LIGHTGRAY });
     working.obstacles.clear();
     working.doors.clear();
-    working.doors.push_back(LevelDoor{ Vector3{ 0, 0, -9 }, Vector3{ 4, 3, 0.5f }, DARKBROWN, -1 });
+    
+    LevelDoor defaultDoor;
+    defaultDoor.position = Vector3{ 0, 0, -9 };
+    defaultDoor.size = Vector3{ 4, 3, 0.5f };
+    defaultDoor.color = DARKBROWN;
+    defaultDoor.logicOp = "OR";
+    working.doors.push_back(defaultDoor);
+
     working.exitPosition = Vector3{ 0, 0, -11 };
     working.exitRadius = 1.5f;
     working.fallResetY = -8.0f;
@@ -162,6 +169,16 @@ void LevelEditor::DeleteSelected() {
         for (auto& door : working.doors) {
             if (door.linkedSwitch == selIndex) door.linkedSwitch = -1;
             else if (door.linkedSwitch > selIndex) door.linkedSwitch--;
+            
+            // Aggiorna anche la lista linked_switches
+            for (auto it = door.linkedSwitches.begin(); it != door.linkedSwitches.end(); ) {
+                if (*it == selIndex) {
+                    it = door.linkedSwitches.erase(it);
+                } else {
+                    if (*it > selIndex) (*it)--;
+                    ++it;
+                }
+            }
         }
         for (size_t k = 0; k < working.fixedSequence.size(); ) {
             if (working.fixedSequence[k] == selIndex) {
@@ -202,7 +219,7 @@ void LevelEditor::Update() {
 
     Vector2 mouseScreen = GetMousePosition();
     bool inCanvas = MouseInCanvas();
-    Vector2 mw = ScreenToWorld(mouseScreen); // mw.x = X mondo, mw.y = Z mondo
+    Vector2 mw = ScreenToWorld(mouseScreen);
 
     if (tool == EditorTool::SELECT) {
         if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && inCanvas) {
@@ -278,33 +295,33 @@ void LevelEditor::Update() {
         if (isDraggingNew && IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) {
             isDraggingNew = false;
             if (dragStartedInCanvas || inCanvas) {
-            Vector2 endW = mw;
-            float minX = std::min(dragStartWorld.x, endW.x), maxX = std::max(dragStartWorld.x, endW.x);
-            float minZ = std::min(dragStartWorld.y, endW.y), maxZ = std::max(dragStartWorld.y, endW.y);
-            float sizeX = maxX - minX, sizeZ = maxZ - minZ;
-            if (sizeX < 1.0f) { float cx = (minX + maxX) / 2.0f; minX = cx - 1.0f; maxX = cx + 1.0f; sizeX = 2.0f; }
-            if (sizeZ < 1.0f) { float cz = (minZ + maxZ) / 2.0f; minZ = cz - 1.0f; maxZ = cz + 1.0f; sizeZ = 2.0f; }
+                Vector2 endW = mw;
+                float minX = std::min(dragStartWorld.x, endW.x), maxX = std::max(dragStartWorld.x, endW.x);
+                float minZ = std::min(dragStartWorld.y, endW.y), maxZ = std::max(dragStartWorld.y, endW.y);
+                float sizeX = maxX - minX, sizeZ = maxZ - minZ;
+                if (sizeX < 1.0f) { float cx = (minX + maxX) / 2.0f; minX = cx - 1.0f; maxX = cx + 1.0f; sizeX = 2.0f; }
+                if (sizeZ < 1.0f) { float cz = (minZ + maxZ) / 2.0f; minZ = cz - 1.0f; maxZ = cz + 1.0f; sizeZ = 2.0f; }
 
-            LevelBox box;
-            box.position.x = (minX + maxX) / 2.0f;
-            box.position.z = (minZ + maxZ) / 2.0f;
-            box.size.x = sizeX;
-            box.size.z = sizeZ;
-            box.color = kPalette[colorIndex].second;
+                LevelBox box;
+                box.position.x = (minX + maxX) / 2.0f;
+                box.position.z = (minZ + maxZ) / 2.0f;
+                box.size.x = sizeX;
+                box.size.z = sizeZ;
+                box.color = kPalette[colorIndex].second;
 
-            if (tool == EditorTool::PLATFORM) {
-                box.size.y = 0.5f;
-                box.position.y = newPlatformTopY - 0.25f;
-                working.platforms.push_back(box);
-            } else if (tool == EditorTool::OBSTACLE) {
-                box.size.y = newObstacleHeight;
-                box.position.y = newObstacleHeight / 2.0f;
-                working.obstacles.push_back(box);
-            } else {
-                box.size.y = std::min(sizeX, sizeZ);
-                box.position.y = newPlatformTopY + box.size.y / 2.0f;
-                working.draggables.push_back(box);
-            }
+                if (tool == EditorTool::PLATFORM) {
+                    box.size.y = 0.5f;
+                    box.position.y = newPlatformTopY - 0.25f;
+                    working.platforms.push_back(box);
+                } else if (tool == EditorTool::OBSTACLE) {
+                    box.size.y = newObstacleHeight;
+                    box.position.y = newObstacleHeight / 2.0f;
+                    working.obstacles.push_back(box);
+                } else {
+                    box.size.y = std::min(sizeX, sizeZ);
+                    box.position.y = newPlatformTopY + box.size.y / 2.0f;
+                    working.draggables.push_back(box);
+                }
             }
         }
     }
@@ -335,6 +352,7 @@ void LevelEditor::Update() {
             door.size = Vector3{ 4, 3, 0.5f };
             door.color = DARKBROWN;
             door.linkedSwitch = -1;
+            door.logicOp = "OR";
             working.doors.push_back(door);
             selType = EditorSelType::DOOR;
             selIndex = (int)working.doors.size() - 1;
@@ -382,9 +400,7 @@ void LevelEditor::DrawTopBar() {
         showLoadBox = true;
     }
     if (DrawButton(saveBtn, "SALVA", 16, DARKGREEN, GREEN, WHITE)) {
-        if (working.switches.empty()) {
-            SetStatus("Aggiungi almeno un interruttore prima di salvare.", true);
-        } else if (!currentFilePath.empty()) {
+        if (!currentFilePath.empty()) {
             std::string err;
             if (LevelManager::SaveToFile(currentFilePath, working, err)) SetStatus("Livello salvato in " + currentFilePath, false);
             else SetStatus(err, true);
@@ -396,8 +412,7 @@ void LevelEditor::DrawTopBar() {
         }
     }
     if (DrawButton(testBtn, "PROVA LIVELLO", 15, GOLD, YELLOW, BLACK)) {
-        if (working.switches.empty()) SetStatus("Aggiungi almeno un interruttore prima di provarlo.", true);
-        else playtestRequested = true;
+        playtestRequested = true;
     }
     if (DrawButton(backBtn, "MENU PRINCIPALE", 14, MAROON, RED, WHITE)) exitRequested = true;
 }
@@ -606,6 +621,7 @@ void LevelEditor::DrawSidebar() {
               std::string s = TextFormat("%.1f", door.size.x);
               DrawText(s.c_str(), (int)(x + w / 2 - MeasureText(s.c_str(), 16) / 2), (int)y + 3, 16, BLACK);
               y += 28; }
+
             DrawText("Altezza porta:", (int)x, (int)y, 11, DARKGRAY); y += 14;
             { Rectangle m = { x, y, 28, 24 }, p = { x + w - 28, y, 28, 24 };
               if (DrawMiniButton(m, "-", LIGHTGRAY, GRAY)) door.size.y = std::max(1.0f, door.size.y - 0.5f);
@@ -614,22 +630,39 @@ void LevelEditor::DrawSidebar() {
               DrawText(s.c_str(), (int)(x + w / 2 - MeasureText(s.c_str(), 16) / 2), (int)y + 3, 16, BLACK);
               y += 28; }
 
-            DrawText("Si apre con:", (int)x, (int)y, 11, DARKGRAY); y += 14;
+            // porta logica And/Or
+            DrawText("Logica porta (AND / OR):", (int)x, (int)y, 11, DARKGRAY); y += 14;
             {
-                std::string label = (door.linkedSwitch < 0 || door.linkedSwitch >= (int)working.switches.size())
-                    ? "Puzzle completo"
-                    : working.switches[door.linkedSwitch].name;
-                Rectangle m = { x, y, 28, 24 }, p = { x + w - 28, y, 28, 24 };
-                int n = (int)working.switches.size();
-                if (DrawMiniButton(m, "<", LIGHTGRAY, GRAY)) {
-                    door.linkedSwitch = (door.linkedSwitch <= -1) ? (n - 1) : (door.linkedSwitch - 1);
+                Rectangle logicBtn = { x, y, w, 26 };
+                std::string logicLabel = "Operatore: " + door.logicOp;
+                if (DrawButton(logicBtn, logicLabel.c_str(), 13, DARKBLUE, BLUE, WHITE)) {
+                    door.logicOp = (door.logicOp == "AND") ? "OR" : "AND";
                 }
-                DrawText(label.c_str(), (int)(x + w / 2 - MeasureText(label.c_str(), 13) / 2), (int)y + 5, 13, BLACK);
-                if (DrawMiniButton(p, ">", LIGHTGRAY, GRAY)) {
-                    door.linkedSwitch = (door.linkedSwitch >= n - 1) ? -1 : (door.linkedSwitch + 1);
-                }
-                y += 28;
+                y += 30;
             }
+
+            // interruttori multipli collegati
+            DrawText("Interruttori collegati (multi-select):", (int)x, (int)y, 11, DARKGRAY); y += 16;
+            if (working.switches.empty()) {
+                DrawText("Nessun interruttore nel livello.", (int)x, (int)y, 12, GRAY); y += 22;
+            } else {
+                for (size_t sIdx = 0; sIdx < working.switches.size(); sIdx++) {
+                    auto it = std::find(door.linkedSwitches.begin(), door.linkedSwitches.end(), (int)sIdx);
+                    bool isLinked = (it != door.linkedSwitches.end());
+
+                    std::string swLabel = std::to_string(sIdx + 1) + ". " + working.switches[sIdx].name;
+                    Rectangle swBtn = { x, y, w, 24 };
+                    if (DrawButton(swBtn, swLabel.c_str(), 12, isLinked ? DARKGREEN : LIGHTGRAY, isLinked ? GREEN : GRAY, isLinked ? WHITE : BLACK)) {
+                        if (isLinked) {
+                            door.linkedSwitches.erase(it);
+                        } else {
+                            door.linkedSwitches.push_back((int)sIdx);
+                        }
+                    }
+                    y += 27;
+                }
+            }
+            
 
             {
                 Rectangle rotBtn = { x, y, w, 26 };
@@ -774,9 +807,10 @@ void LevelEditor::DrawCanvas() {
         bool sel = (selType == EditorSelType::DOOR && selIndex == (int)i);
         DrawRectangleRec(r, d.color);
         DrawRectangleLinesEx(r, sel ? 3.0f : 1.0f, sel ? GOLD : BLACK);
-        if (d.linkedSwitch >= 0 && d.linkedSwitch < (int)working.switches.size()) {
-            DrawText(working.switches[d.linkedSwitch].name.c_str(), (int)c.x + 8, (int)c.y - 18, 12, DARKBLUE);
-        }
+        
+        // Mostra info logica sulla porta nel canvas
+        std::string info = "P" + std::to_string(i + 1) + " [" + d.logicOp + "]";
+        DrawText(info.c_str(), (int)c.x + 8, (int)c.y - 18, 12, DARKBLUE);
     }
     {
         Vector2 c = WorldToScreen(working.exitPosition.x, working.exitPosition.z);

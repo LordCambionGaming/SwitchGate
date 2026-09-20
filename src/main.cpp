@@ -10,6 +10,7 @@
 #include <string>
 #include <algorithm>
 #include <random>
+#include <cctype>
 
 #if defined(_WIN32) && defined(NDEBUG)
 // Nelle build Release su Windows, nasconde la finestra della console nera
@@ -523,22 +524,94 @@ int main() {
                 run.padPressed[i] = pressed;
             }
 
-            std::vector<bool> doorOpenedByPad(currentLevel.doors.size(), false);
-            for (size_t i = 0; i < currentLevel.pads.size(); i++) {
-                int ld = currentLevel.pads[i].linkedDoor;
-                if (run.padPressed[i] && ld >= 0 && ld < (int)doorOpenedByPad.size()) doorOpenedByPad[ld] = true;
-            }
-
+            // aggiornamento porte and / or
             for (size_t i = 0; i < currentLevel.doors.size(); i++) {
                 const LevelDoor& door = currentLevel.doors[i];
-                bool shouldBeOpen = doorOpenedByPad[i] || ((door.linkedSwitch < 0)
-                    ? run.solved
-                    : (door.linkedSwitch < (int)run.activated.size() && run.activated[door.linkedSwitch]));
+
+                std::string op = door.logicOp;
+                std::transform(op.begin(), op.end(), op.begin(), ::tolower);
+                bool isAnd = (op == "and");
+
+                // 1. Interruttori collegati
+                bool switchesSatisfied = true;
+                bool hasSwitchInput = !door.linkedSwitches.empty() || door.linkedSwitch >= 0;
+
+                if (!door.linkedSwitches.empty()) {
+                    if (isAnd) {
+                        switchesSatisfied = true;
+                        for (int swIdx : door.linkedSwitches) {
+                            if (swIdx < 0 || swIdx >= (int)run.activated.size() || !run.activated[swIdx]) {
+                                switchesSatisfied = false;
+                                break;
+                            }
+                        }
+                    } else { // "OR"
+                        switchesSatisfied = false;
+                        for (int swIdx : door.linkedSwitches) {
+                            if (swIdx >= 0 && swIdx < (int)run.activated.size() && run.activated[swIdx]) {
+                                switchesSatisfied = true;
+                                break;
+                            }
+                        }
+                    }
+                } else if (door.linkedSwitch >= 0) {
+                    switchesSatisfied = (door.linkedSwitch < (int)run.activated.size() && run.activated[door.linkedSwitch]);
+                } else {
+                    hasSwitchInput = false;
+                    switchesSatisfied = false;
+                }
+
+                // 2. Pedane collegate
+                std::vector<bool> connectedPadsStates;
+                for (size_t pIdx = 0; pIdx < currentLevel.pads.size(); pIdx++) {
+                    if (currentLevel.pads[pIdx].linkedDoor == (int)i) {
+                        connectedPadsStates.push_back(run.padPressed[pIdx]);
+                    }
+                }
+
+                bool padsSatisfied = true;
+                bool hasPadInput = !connectedPadsStates.empty();
+
+                if (hasPadInput) {
+                    if (isAnd) {
+                        padsSatisfied = true;
+                        for (bool pressed : connectedPadsStates) {
+                            if (!pressed) {
+                                padsSatisfied = false;
+                                break;
+                            }
+                        }
+                    } else { // "OR"
+                        padsSatisfied = false;
+                        for (bool pressed : connectedPadsStates) {
+                            if (pressed) {
+                                padsSatisfied = true;
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    padsSatisfied = false;
+                }
+
+                // 3. Combinazione finale
+                bool shouldBeOpen = false;
+                if (hasSwitchInput && hasPadInput) {
+                    shouldBeOpen = isAnd ? (switchesSatisfied && padsSatisfied) : (switchesSatisfied || padsSatisfied);
+                } else if (hasSwitchInput) {
+                    shouldBeOpen = switchesSatisfied;
+                } else if (hasPadInput) {
+                    shouldBeOpen = padsSatisfied;
+                } else {
+                    shouldBeOpen = run.solved;
+                }
+
                 float target = shouldBeOpen ? 0.0f : door.size.y;
                 float speed = dt * 2.0f;
                 if (run.doorHeights[i] < target) run.doorHeights[i] = std::min(target, run.doorHeights[i] + speed);
                 else if (run.doorHeights[i] > target) run.doorHeights[i] = std::max(target, run.doorHeights[i] - speed);
             }
+            
 
             if (!run.won) run.elapsedTime += dt;
 

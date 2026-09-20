@@ -116,17 +116,13 @@ bool LevelManager::LoadFromFile(const std::string& path, LevelData& out, std::st
                 lvl.switches.push_back(sw);
             }
         }
-        if (lvl.switches.empty()) {
-            errorMessage = "Il livello \"" + path + "\" non contiene nessun interruttore (\"switches\").";
-            return false;
-        }
 
         if (j.contains("random_sequence")) lvl.randomSequence = j["random_sequence"].get<bool>();
         if (j.contains("sequence") && j["sequence"].is_array()) {
             for (const auto& v : j["sequence"]) lvl.fixedSequence.push_back(v.get<int>());
         }
         // Se la sequenza fissa e' incoerente con il numero di interruttori, ripiega sull'ordine naturale.
-        if (!lvl.randomSequence) {
+        if (!lvl.randomSequence && !lvl.switches.empty()) {
             bool valid = lvl.fixedSequence.size() == lvl.switches.size();
             if (valid) {
                 std::vector<int> sorted = lvl.fixedSequence;
@@ -164,6 +160,12 @@ bool LevelManager::LoadFromFile(const std::string& path, LevelData& out, std::st
                 if (d.contains("size")) door.size = ParseVec3(d["size"], door.size);
                 if (d.contains("color")) door.color = ParseColor(d["color"], door.color);
                 if (d.contains("linked_switch")) door.linkedSwitch = d["linked_switch"].get<int>();
+                if (d.contains("linked_switches") && d["linked_switches"].is_array()) {
+                    for (const auto& swIdx : d["linked_switches"]) {
+                        door.linkedSwitches.push_back(swIdx.get<int>());
+                    }
+                }
+                if (d.contains("logic_op")) door.logicOp = d["logic_op"].get<std::string>();
                 if (d.contains("rotated")) door.rotated = d["rotated"].get<bool>();
                 lvl.doors.push_back(door);
             }
@@ -272,6 +274,8 @@ bool LevelManager::SaveToFile(const std::string& path, const LevelData& level, s
             { "size", Vec3ToJson(d.size) },
             { "color", ColorToJson(d.color) },
             { "linked_switch", d.linkedSwitch },
+            { "linked_switches", d.linkedSwitches },
+            { "logic_op", d.logicOp },
             { "rotated", d.rotated }
         });
     }

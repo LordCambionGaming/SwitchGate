@@ -27,7 +27,9 @@ struct LevelDoor {
     Vector3 position{ 0, 0, -9 };
     Vector3 size{ 4, 3, 0.5f };
     Color color = DARKBROWN;
-    int linkedSwitch = -1;
+    int linkedSwitch = -1;                 // Compatibilità con il vecchio formato
+    std::vector<int> linkedSwitches;       // Lista di interruttori collegati 
+    std::string logicOp = "OR";            // Operatore logico: "OR" oppure "AND"
     bool rotated = false;
 };
 
