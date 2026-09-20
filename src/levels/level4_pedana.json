@@ -1,0 +1,110 @@
+{
+  "description": "Spingi la cassa arancione sulla pedana per aprire la porta, poi attiva l'interruttore.",
+  "doors": [
+    {
+      "color": "darkbrown",
+      "linked_switch": -1,
+      "position": [
+        0.0,
+        0.0,
+        4.0
+      ],
+      "rotated": false,
+      "size": [
+        8.0,
+        3.0,
+        0.5
+      ]
+    },
+    {
+      "color": "darkbrown",
+      "linked_switch": -1,
+      "position": [
+        0.0,
+        0.0,
+        -4.0
+      ],
+      "rotated": false,
+      "size": [
+        8.5,
+        3.0,
+        0.5
+      ]
+    }
+  ],
+  "draggables": [
+    {
+      "color": "orange",
+      "position": [
+        -2.142857074737549,
+        0.75,
+        8.085714340209961
+      ],
+      "size": [
+        1.5,
+        1.5,
+        1.5
+      ]
+    }
+  ],
+  "exit": {
+    "position": [
+      0.0,
+      0.0,
+      -6.0
+    ],
+    "radius": 1.5
+  },
+  "fall_reset_y": -8.0,
+  "gravity": true,
+  "name": "Livello 4 - Spingi la Cassa",
+  "obstacles": [],
+  "pads": [
+    {
+      "color": "orange",
+      "linked_door": 0,
+      "position": [
+        2.885714292526245,
+        0.05000000074505806,
+        8.085714340209961
+      ],
+      "size": [
+        1.5,
+        0.10000000149011612,
+        1.5
+      ]
+    }
+  ],
+  "platforms": [
+    {
+      "color": "lightgray",
+      "position": [
+        0.0,
+        -0.25,
+        4.0
+      ],
+      "size": [
+        8.5,
+        0.5,
+        30.0
+      ]
+    }
+  ],
+  "player_start": [
+    0.0,
+    1.0,
+    14.0
+  ],
+  "random_sequence": true,
+  "switches": [
+    {
+      "color": "red",
+      "name": "ROSSO",
+      "position": [
+        0.0,
+        0.5,
+        0.0
+      ]
+    }
+  ]
+}
