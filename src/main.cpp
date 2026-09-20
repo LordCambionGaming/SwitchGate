@@ -102,6 +102,40 @@ static void ResolveBoxCollision(Vector3& pos, float radius, Vector3 boxPos, Vect
     }
 }
 
+// Risolve la collisione tra due casse: la cassa A si ferma (viene respinta fuori da B) senza muovere B
+static void ResolveBoxToBoxCollision(Vector3& posA, Vector3 sizeA, Vector3& posB, Vector3 sizeB) {
+    float minXA = posA.x - sizeA.x / 2.0f;
+    float maxXA = posA.x + sizeA.x / 2.0f;
+    float minZA = posA.z - sizeA.z / 2.0f;
+    float maxZA = posA.z + sizeA.z / 2.0f;
+
+    float minXB = posB.x - sizeB.x / 2.0f;
+    float maxXB = posB.x + sizeB.x / 2.0f;
+    float minZB = posB.z - sizeB.z / 2.0f;
+    float maxZB = posB.z + sizeB.z / 2.0f;
+
+    float minYA = posA.y - sizeA.y / 2.0f;
+    float maxYA = posA.y + sizeA.y / 2.0f;
+    float minYB = posB.y - sizeB.y / 2.0f;
+    float maxYB = posB.y + sizeB.y / 2.0f;
+
+    if (maxXA > minXB && minXA < maxXB && maxYA > minYB && minYA < maxYB && maxZA > minZB && minZA < maxZB) {
+        float overlapLeft = maxXA - minXB;
+        float overlapRight = maxXB - minXA;
+        float overlapBack = maxZA - minZB;
+        float overlapFront = maxZB - minZA;
+
+        float minOverlapX = std::min(overlapLeft, overlapRight);
+        float minOverlapZ = std::min(overlapBack, overlapFront);
+
+        if (minOverlapX < minOverlapZ) {
+            posA.x += (overlapLeft < overlapRight) ? -overlapLeft : overlapRight;
+        } else {
+            posA.z += (overlapBack < overlapFront) ? -overlapBack : overlapFront;
+        }
+    }
+}
+
 static void ResolveObstacles(Vector3& pos, float radius, const std::vector<LevelBox>& obstacles) {
     for (const auto& o : obstacles) ResolveBoxCollision(pos, radius, o.position, o.size);
 }
@@ -190,14 +224,14 @@ static void StartRun(RunState& run, const LevelData& level, std::mt19937& rng) {
     run.sequence.resize(level.switches.size());
     for (size_t i = 0; i < level.switches.size(); i++) run.sequence[i] = (int)i;
 
-    if (level.randomSequence) {
+    if (level.randomSequence && !level.switches.empty()) {
         std::shuffle(run.sequence.begin(), run.sequence.end(), rng);
     } else if (level.fixedSequence.size() == level.switches.size()) {
         run.sequence = level.fixedSequence;
     }
 
     run.currentStep = 0;
-    run.solved = false;
+    run.solved = level.switches.empty();
     run.won = false;
     run.doorHeights.resize(level.doors.size());
     for (size_t i = 0; i < level.doors.size(); i++) run.doorHeights[i] = level.doors[i].size.y;
@@ -256,7 +290,7 @@ int main() {
     const int screenWidth = 1280;
     const int screenHeight = 720;
 
-    InitWindow(screenWidth, screenHeight, "Puzzle 3D - Interruttori");
+    InitWindow(screenWidth, screenHeight, "Switch Gate");
     rlEnableBackfaceCulling();
     SetExitKey(KEY_NULL);
     SetTargetFPS(60);
@@ -395,14 +429,35 @@ int main() {
                         cratePos.z += (dz >= 0.0f) ? overlapZ : -overlapZ;
                     }
 
-                    // La cassa non puo' essere spinta dentro un muro o una porta chiusa.
-                    float crateRadius = std::max(crateSize.x, crateSize.z) / 2.0f;
-                    ResolveObstacles(cratePos, crateRadius, currentLevel.obstacles);
-                    ResolveDoors(cratePos, crateRadius, currentLevel.doors, run.doorHeights);
+                    // Se la cassa spinta incontra un'altra cassa o un muro, si ferma (viene bloccata)
+                    for (int iter = 0; iter < 2; iter++) {
+                        for (size_t j = 0; j < run.draggablePos.size(); j++) {
+                            if (i == j) continue;
+                            ResolveBoxToBoxCollision(run.draggablePos[i], currentLevel.draggables[i].size,
+                                                     run.draggablePos[j], currentLevel.draggables[j].size);
+                        }
+                        float crateRadius = std::max(crateSize.x, crateSize.z) / 2.0f;
+                        ResolveObstacles(cratePos, crateRadius, currentLevel.obstacles);
+                        ResolveDoors(cratePos, crateRadius, currentLevel.doors, run.doorHeights);
+                    }
 
-                    // E il giocatore non resta a compenetrare la cassa, sia che
-                    // si sia spostata (spinta) sia che sia rimasta ferma (bloccata).
                     ResolveBoxCollision(run.player.position, run.player.radius, cratePos, crateSize);
+                }
+            }
+
+            // Risoluzione generale tra tutte le casse e ostacoli
+            for (int iter = 0; iter < 2; iter++) {
+                for (size_t i = 0; i < run.draggablePos.size(); i++) {
+                    for (size_t j = 0; j < run.draggablePos.size(); j++) {
+                        if (i == j) continue;
+                        ResolveBoxToBoxCollision(run.draggablePos[i], currentLevel.draggables[i].size,
+                                                 run.draggablePos[j], currentLevel.draggables[j].size);
+                    }
+                }
+                for (size_t i = 0; i < run.draggablePos.size(); i++) {
+                    float crateRadius = std::max(currentLevel.draggables[i].size.x, currentLevel.draggables[i].size.z) / 2.0f;
+                    ResolveObstacles(run.draggablePos[i], crateRadius, currentLevel.obstacles);
+                    ResolveDoors(run.draggablePos[i], crateRadius, currentLevel.doors, run.doorHeights);
                 }
             }
 
@@ -425,7 +480,7 @@ int main() {
                 }
             }
 
-            if (!run.solved && IsKeyPressed(kb.interact)) {
+            if (!run.solved && !currentLevel.switches.empty() && IsKeyPressed(kb.interact)) {
                 for (int i = 0; i < (int)currentLevel.switches.size(); i++) {
                     if (run.activated[i]) continue;
                     const Vector3& sp = currentLevel.switches[i].position;
@@ -450,7 +505,7 @@ int main() {
             }
 
             if (run.flashTimer > 0.0f) run.flashTimer -= dt; else run.flashWrong = false;
-            if (!run.solved && IsKeyPressed(kb.hint)) run.hintTimer = 3.0f;
+            if (!run.solved && !currentLevel.switches.empty() && IsKeyPressed(kb.hint)) run.hintTimer = 3.0f;
             if (run.hintTimer > 0.0f) run.hintTimer -= dt;
 
             for (size_t i = 0; i < currentLevel.pads.size(); i++) {
@@ -493,7 +548,7 @@ int main() {
                 float r = currentLevel.exitRadius;
                 if (dx * dx + dz * dz < r * r) {
                     run.won = true;
-                    run.score = (int)(currentLevel.switches.size() * 500 +
+                    run.score = (int)(std::max(1.0f, (float)currentLevel.switches.size()) * 500 +
                                        std::max(0.0f, 3000.0f - run.elapsedTime * 20.0f));
                     if (!playtestFromEditor && !currentLevel.filePath.empty()) {
                         HighscoreEntry& hs = highscores[currentLevel.filePath];
@@ -524,7 +579,6 @@ int main() {
         ClearBackground(RAYWHITE);
 
         if (state == GameState::MENU) {
-            // Sfondo 3D animato, semplice, dietro al menu
             Camera3D bgCam = camera;
             bgCam.position = Vector3{ sinf(menuTime * 0.15f) * 16.0f, 10.0f, cosf(menuTime * 0.15f) * 16.0f };
             bgCam.target = Vector3{ 0, 0, 0 };
@@ -542,7 +596,7 @@ int main() {
 
             DrawRectangle(0, 0, screenWidth, screenHeight, Fade(RAYWHITE, 0.55f));
 
-            const char* title = "PUZZLE 3D";
+            const char* title = "SWITCH GATE";
             int titleSize = 72;
             int tw = MeasureText(title, titleSize);
             DrawText(title, screenWidth / 2 - tw / 2 + 3, 133, titleSize, Fade(BLACK, 0.25f));
@@ -768,7 +822,7 @@ int main() {
                           540, (int)y + 13, 14, DARKGRAY);
             }
 
-            y += 14.0f;
+            y += 50.0f;
             float contentHeight = y - settingsTop;
 
             rlPopMatrix();
@@ -862,9 +916,6 @@ int main() {
 
             EndMode3D();
 
-            // Il nome dell'interruttore, proiettato sopra di esso, aiuta chiunque
-            // a capire subito quale sia senza dover fare affidamento solo sul
-            // colore (utile in generale, essenziale per chi ha discromatopsie).
             for (size_t i = 0; i < currentLevel.switches.size(); i++) {
                 Vector3 labelPos = Vector3Add(currentLevel.switches[i].position, Vector3{ 0, 0.9f, 0 });
                 Vector2 sp = GetWorldToScreen(labelPos, camera);
@@ -895,7 +946,7 @@ int main() {
                 }
             }
 
-            if (run.hintTimer > 0.0f && !run.solved && run.currentStep < (int)run.sequence.size()) {
+            if (run.hintTimer > 0.0f && !run.solved && !currentLevel.switches.empty() && run.currentStep < (int)run.sequence.size()) {
                 int targetIdx = run.sequence[run.currentStep];
                 Vector3 targetPos = currentLevel.switches[targetIdx].position;
                 float bounce = 1.6f + 0.2f * sinf((float)GetTime() * 6.0f);
@@ -912,14 +963,19 @@ int main() {
             DrawText("Muoviti con WASD, SPAZIO per saltare. Tocca un interruttore e premi E per attivarlo.",
                       10, 36, 16, DARKGRAY);
 
-            std::string seqText = "Sequenza: ";
-            for (size_t k = 0; k < run.sequence.size(); k++) {
-                seqText += currentLevel.switches[run.sequence[k]].name;
-                if (k + 1 < run.sequence.size()) seqText += " > ";
+            if (!currentLevel.switches.empty()) {
+                std::string seqText = "Sequenza: ";
+                for (size_t k = 0; k < run.sequence.size(); k++) {
+                    seqText += currentLevel.switches[run.sequence[k]].name;
+                    if (k + 1 < run.sequence.size()) seqText += " > ";
+                }
+                DrawText(seqText.c_str(), 10, 58, 18, BLACK);
+                DrawText(TextFormat("Passo attuale: %d / %d", run.currentStep, (int)run.sequence.size()),
+                          10, 80, 18, DARKBLUE);
+            } else {
+                DrawText("Livello senza interruttori (usa pedane e casse)", 10, 58, 18, DARKGREEN);
             }
-            DrawText(seqText.c_str(), 10, 58, 18, BLACK);
-            DrawText(TextFormat("Passo attuale: %d / %d", run.currentStep, (int)run.sequence.size()),
-                      10, 80, 18, DARKBLUE);
+
             DrawText(TextFormat("Tempo: %s", FormatTime(run.elapsedTime).c_str()), 10, 102, 18, DARKGREEN);
             DrawText("ESC: torna indietro   |   R: ricomincia", 10, screenHeight - 26, 16, DARKGRAY);
 
@@ -969,7 +1025,7 @@ int main() {
 
     if (hasMusic) UnloadMusicStream(menuMusic);
     CloseAudioDevice();
-    UnloadModel(crateModel); // libera anche crateTexture, assegnata al suo materiale
+    UnloadModel(crateModel);
     CloseWindow();
     return 0;
 }
