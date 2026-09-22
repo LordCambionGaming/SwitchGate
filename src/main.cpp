@@ -58,6 +58,7 @@ struct RunState {
     // dall'angolo configurato nel livello (currentLevel.mirrors non viene
     // mai modificato), cosi' "Ricomincia livello" li riporta all'originale.
     std::vector<float> mirrorAngles;
+    std::vector<float> targetMirrorAngles;
 };
 
 // Copia level applicando gli angoli specchio CORRENTI della partita
@@ -103,7 +104,11 @@ static void StartRun(RunState& run, const LevelData& level, std::mt19937& rng) {
     run.draggableVel.assign(level.draggables.size(), Vector3{ 0, 0, 0 });
     for (const auto& d : level.draggables) run.draggablePos.push_back(d.position);
     run.mirrorAngles.clear();
-    for (const auto& m : level.mirrors) run.mirrorAngles.push_back(m.angleDeg);
+    run.targetMirrorAngles.clear();
+    for (const auto& m : level.mirrors) {
+        run.mirrorAngles.push_back(m.angleDeg);
+        run.targetMirrorAngles.push_back(m.angleDeg);
+    }
     run.player.position = level.playerStart;
     run.player.velocity = { 0, 0, 0 };
     run.player.onGround = false;
@@ -278,17 +283,26 @@ int main() {
                     if (d2 < nearestDistSq) { nearestDistSq = d2; nearestMirror = (int)i; }
                 }
                 if (nearestMirror >= 0) {
-                    const float mirrorRotSpeed = 90.0f; // gradi al secondo
-                    float rot = 0.0f;
-                    if (IsKeyDown(KEY_Q)) rot -= mirrorRotSpeed * dt;
-                    if (IsKeyDown(KEY_E)) rot += mirrorRotSpeed * dt;
-                    if (rot != 0.0f) {
-                        float a = run.mirrorAngles[nearestMirror] + rot;
-                        while (a < 0.0f) a += 360.0f;
-                        while (a >= 360.0f) a -= 360.0f;
-                        run.mirrorAngles[nearestMirror] = a;
-                    }
+                    if (IsKeyPressed(KEY_Q)) run.targetMirrorAngles[nearestMirror] -= 45.0f;
+                    if (IsKeyPressed(KEY_E)) run.targetMirrorAngles[nearestMirror] += 45.0f;
                 }
+            }
+
+            // Animazione fluida dell'angolo dello specchio verso il target
+            for (size_t i = 0; i < run.mirrorAngles.size(); i++) {
+                float diff = run.targetMirrorAngles[i] - run.mirrorAngles[i];
+                while (diff > 180.0f) diff -= 360.0f;
+                while (diff < -180.0f) diff += 360.0f;
+
+                float mirrorAnimSpeed = 360.0f; // Velocità di rotazione (gradi al secondo)
+                if (fabsf(diff) < 0.5f) {
+                    run.mirrorAngles[i] = run.targetMirrorAngles[i];
+                } else {
+                    run.mirrorAngles[i] += Clamp(diff, -mirrorAnimSpeed * dt, mirrorAnimSpeed * dt);
+                }
+
+                while (run.mirrorAngles[i] < 0.0f) run.mirrorAngles[i] += 360.0f;
+                while (run.mirrorAngles[i] >= 360.0f) run.mirrorAngles[i] -= 360.0f;
             }
 
             camera.target = run.player.position;

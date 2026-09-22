@@ -405,12 +405,12 @@ void LevelEditor::Update() {
             DeleteSelected();
         }
 
-        // Q / E: ruota di 15 gradi lo specchio o l'emettitore selezionato,
+        // Q / E: ruota di 45 gradi lo specchio o l'emettitore selezionato,
         // senza dover usare i bottoni +/- nella sidebar.
         if (!nameActive && !descActive && !switchNameActive) {
             float rotStep = 0.0f;
-            if (IsKeyPressed(KEY_Q)) rotStep = -15.0f;
-            else if (IsKeyPressed(KEY_E)) rotStep = 15.0f;
+            if (IsKeyPressed(KEY_Q)) rotStep = -45.0f;
+            else if (IsKeyPressed(KEY_E)) rotStep = 45.0f;
             if (rotStep != 0.0f) {
                 if (selType == EditorSelType::MIRROR && selIndex >= 0 && selIndex < (int)working.mirrors.size()) {
                     working.mirrors[selIndex].angleDeg = WrapAngle(working.mirrors[selIndex].angleDeg + rotStep);
