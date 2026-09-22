@@ -63,3 +63,39 @@ Esempio di struttura di base per una porta logica `AND` collegata a più interru
     { "name": "BLU", "color": "blue", "position": [-3.0, 0.5, 0.0] }
   ]
 }
+```
+
+### Raggi di luce e specchi
+
+Un terzo modo (oltre a interruttori e pedane) per aprire una porta: un **emettitore**
+spara un raggio continuo, gli **specchi** lo riflettono, e un **ricevitore** colpito
+dal raggio giusto puo' aprire una porta collegata (`linked_door`), esattamente come
+fanno le pedane. Il raggio viaggia sempre in orizzontale: basta un angolo in gradi,
+niente vettori 3D da calcolare a mano.
+
+- `angle`: `0` = raggio/pannello rivolto verso **+Z**, `90` = verso **+X**, `180` =
+  verso **-Z**, `270` = verso **-X** (e qualunque valore intermedio).
+- Gli specchi bloccano il raggio solo se la sua quota (`y` dell'emettitore, che resta
+  costante lungo tutto il percorso) rientra nell'altezza del pannello (`height`).
+- Ostacoli e porte chiuse fermano il raggio; i ricevitori si "accendono" solo se il
+  colore del raggio combacia col loro (oppure se il ricevitore ha colore `"white"`,
+  che accetta qualunque colore).
+
+```json
+{
+  "emitters": [
+    { "position": [8, 1, 6], "angle": 180, "color": "red" }
+  ],
+  "mirrors": [
+    { "position": [8, 1, 0], "angle": 45, "length": 2.5, "height": 2, "color": "skyblue" },
+    { "position": [0, 1, 0], "angle": 45, "length": 2.5, "height": 2, "color": "skyblue" }
+  ],
+  "receivers": [
+    { "position": [0, 1, -8], "radius": 0.6, "color": "red", "linked_door": 0 }
+  ]
+}
+```
+
+Livello di esempio completo: `levels/level6_specchi.json` — il raggio parte
+dall'emettitore, rimbalza su entrambi gli specchi ad angolo retto e raggiunge il
+ricevitore che apre la porta verso l'uscita.

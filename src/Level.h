@@ -1,56 +1,19 @@
 #pragma once
 
 #include "raylib.h"
+#include "objects/Switch.h"
+#include "objects/Box.h"
+#include "objects/Door.h"
+#include "objects/Pad.h"
+#include "objects/Mirror.h"
+#include "objects/Emitter.h"
+#include "objects/Receiver.h"
 #include <string>
 #include <vector>
 
-// Un interruttore da cliccare in un certo ordine.
-struct LevelSwitch {
-    Vector3 position{ 0, 0.5f, 0 };
-    Color color = RED;
-    std::string name = "?";
-};
-
-// Un parallelepipedo generico usato sia per le piattaforme (pavimento/gradini)
-// sia per gli ostacoli (muri pieni che bloccano il movimento).
-struct LevelBox {
-    Vector3 position{ 0, 0, 0 };
-    Vector3 size{ 1, 1, 1 };
-    Color color = LIGHTGRAY;
-};
-
-// Una porta che si apre quando un interruttore specifico viene attivato
-// (linkedSwitch = indice in LevelData::switches), oppure quando l'intero
-// puzzle e' risolto se linkedSwitch e' -1. "rotated" scambia larghezza (X) e
-// profondita' (Z), per poterla orientare anche su un muro laterale.
-struct LevelDoor {
-    Vector3 position{ 0, 0, -9 };
-    Vector3 size{ 4, 3, 0.5f };
-    Color color = DARKBROWN;
-    int linkedSwitch = -1;                 // Compatibilità con il vecchio formato
-    std::vector<int> linkedSwitches;       // Lista di interruttori collegati 
-    std::string logicOp = "OR";            // Operatore logico: "OR" oppure "AND"
-    bool rotated = false;
-};
-
-// Dimensioni della porta come vanno effettivamente usate per disegno e
-// collisioni: se "rotated" e' true, X e Z sono scambiate.
-inline Vector3 GetDoorEffectiveSize(const LevelDoor& door) {
-    if (!door.rotated) return door.size;
-    return Vector3{ door.size.z, door.size.y, door.size.x };
-}
-
-// Una pedana a pressione: si attiva quando una cassa trascinabile dello
-// stesso colore ci si ferma sopra, e in quel caso puo' aprire una porta
-// collegata (linkedDoor = indice in LevelData::doors, -1 = nessun effetto).
-struct LevelPad {
-    Vector3 position{ 0, 0.05f, 0 };
-    Vector3 size{ 1.5f, 0.1f, 1.5f };
-    Color color = RED;
-    int linkedDoor = -1;
-};
-
-// Tutti i dati che descrivono un livello giocabile.
+// Tutti i dati che descrivono un livello giocabile. Ogni tipo di oggetto
+// (interruttori, porte, specchi...) e' definito nel proprio file sotto
+// objects/; qui vengono solo raccolti in un'unica struttura.
 struct LevelData {
     std::string filePath;              // percorso del file .json di origine
     std::string name = "Livello";
@@ -67,6 +30,10 @@ struct LevelData {
     std::vector<LevelBox> obstacles;   // muri pieni (bloccano il movimento orizzontale)
     std::vector<LevelBox> draggables;  // casse che il giocatore puo' trascinare col mouse
     std::vector<LevelPad> pads;        // pedane a colore che aprono porte collegate
+
+    std::vector<LevelMirror> mirrors;
+    std::vector<LevelEmitter> emitters;
+    std::vector<LevelReceiver> receivers;
 
     std::vector<LevelDoor> doors;
 

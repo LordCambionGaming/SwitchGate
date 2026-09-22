@@ -33,9 +33,19 @@ FetchContent_MakeAvailable(json)
 add_executable(${PROJECT_NAME}
     src/main.cpp
     src/Level.cpp
+    src/Physics.cpp
+    src/Lighting.cpp
     src/Config.cpp
     src/Scores.cpp
     src/Editor.cpp
+    src/objects/JsonUtil.cpp
+    src/objects/Switch.cpp
+    src/objects/Box.cpp
+    src/objects/Door.cpp
+    src/objects/Pad.cpp
+    src/objects/Mirror.cpp
+    src/objects/Emitter.cpp
+    src/objects/Receiver.cpp
 )
 target_link_libraries(${PROJECT_NAME} PRIVATE raylib nlohmann_json::nlohmann_json)
 
