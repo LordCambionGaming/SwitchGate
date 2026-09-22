@@ -52,7 +52,25 @@ struct RunState {
     std::vector<bool> padPressed;
     std::vector<bool> receiverLit;
     std::vector<LightBeamSegment> beams;
+
+    // Angolo ATTUALE di ogni specchio durante la partita: il giocatore puo'
+    // ruotarli con Q/E per indirizzare il laser (vedi sotto). Parte sempre
+    // dall'angolo configurato nel livello (currentLevel.mirrors non viene
+    // mai modificato), cosi' "Ricomincia livello" li riporta all'originale.
+    std::vector<float> mirrorAngles;
 };
+
+// Copia level applicando gli angoli specchio CORRENTI della partita
+// (run.mirrorAngles, che il giocatore puo' cambiare con Q/E) al posto di
+// quelli statici salvati nel livello. Usata per il calcolo dei raggi di luce
+// e per il disegno durante il gioco, senza mai toccare currentLevel.mirrors.
+static LevelData ApplyMirrorAngles(const LevelData& level, const std::vector<float>& mirrorAngles) {
+    LevelData out = level;
+    for (size_t i = 0; i < out.mirrors.size() && i < mirrorAngles.size(); i++) {
+        out.mirrors[i].angleDeg = mirrorAngles[i];
+    }
+    return out;
+}
 
 static void StartRun(RunState& run, const LevelData& level, std::mt19937& rng) {
     run.activated.assign(level.switches.size(), false);
@@ -84,6 +102,8 @@ static void StartRun(RunState& run, const LevelData& level, std::mt19937& rng) {
     run.draggablePos.clear();
     run.draggableVel.assign(level.draggables.size(), Vector3{ 0, 0, 0 });
     for (const auto& d : level.draggables) run.draggablePos.push_back(d.position);
+    run.mirrorAngles.clear();
+    for (const auto& m : level.mirrors) run.mirrorAngles.push_back(m.angleDeg);
     run.player.position = level.playerStart;
     run.player.velocity = { 0, 0, 0 };
     run.player.onGround = false;
@@ -241,6 +261,36 @@ int main() {
 
             UpdatePlayerPhysics(run.player, currentLevel, run.doorHeights, move, dt, jumpPressed);
 
+            // Il giocatore puo' ruotare lo specchio piu' vicino (se abbastanza
+            // vicino) con Q (senso antiorario) / E (senso orario), per
+            // indirizzare il laser verso il ricevitore giusto. Si ruota
+            // run.mirrorAngles, MAI currentLevel.mirrors: cosi' "Ricomincia
+            // livello" (StartRun) riporta sempre gli specchi all'angolo
+            // originale del livello.
+            if (!currentLevel.mirrors.empty()) {
+                const float mirrorInteractRange = 3.0f;
+                int nearestMirror = -1;
+                float nearestDistSq = mirrorInteractRange * mirrorInteractRange;
+                for (size_t i = 0; i < currentLevel.mirrors.size(); i++) {
+                    float dx = currentLevel.mirrors[i].position.x - run.player.position.x;
+                    float dz = currentLevel.mirrors[i].position.z - run.player.position.z;
+                    float d2 = dx * dx + dz * dz;
+                    if (d2 < nearestDistSq) { nearestDistSq = d2; nearestMirror = (int)i; }
+                }
+                if (nearestMirror >= 0) {
+                    const float mirrorRotSpeed = 90.0f; // gradi al secondo
+                    float rot = 0.0f;
+                    if (IsKeyDown(KEY_Q)) rot -= mirrorRotSpeed * dt;
+                    if (IsKeyDown(KEY_E)) rot += mirrorRotSpeed * dt;
+                    if (rot != 0.0f) {
+                        float a = run.mirrorAngles[nearestMirror] + rot;
+                        while (a < 0.0f) a += 360.0f;
+                        while (a >= 360.0f) a -= 360.0f;
+                        run.mirrorAngles[nearestMirror] = a;
+                    }
+                }
+            }
+
             camera.target = run.player.position;
             const float cameraDistance = 10.0f;
             camera.position = Vector3{
@@ -302,12 +352,14 @@ int main() {
             for (size_t i = 0; i < run.draggablePos.size(); i++) {
                 Vector3& dp = run.draggablePos[i];
                 Vector3& dv = run.draggableVel[i];
+                float halfH = currentLevel.draggables[i].size.y / 2.0f;
+                float prevBottomY = dp.y - halfH;
+
                 if (currentLevel.gravityEnabled) dv.y += GRAVITY * dt; else dv.y = 0.0f;
                 dp.y += dv.y * dt;
 
-                float halfH = currentLevel.draggables[i].size.y / 2.0f;
                 float groundY;
-                bool hasGround = FindGroundY(currentLevel, dp.x, dp.z, groundY);
+                bool hasGround = FindGroundY(currentLevel, dp.x, dp.z, prevBottomY + 0.05f, groundY);
                 if (hasGround && dp.y - halfH <= groundY && dv.y <= 0.0f) {
                     dp.y = groundY + halfH;
                     dv.y = 0.0f;
@@ -361,7 +413,7 @@ int main() {
                 run.padPressed[i] = pressed;
             }
 
-            run.beams = ComputeLightBeams(currentLevel, run.doorHeights, run.draggablePos, run.receiverLit);
+            run.beams = ComputeLightBeams(ApplyMirrorAngles(currentLevel, run.mirrorAngles), run.doorHeights, run.draggablePos, run.receiverLit);
 
             // aggiornamento porte and / or
             for (size_t i = 0; i < currentLevel.doors.size(); i++) {
@@ -852,7 +904,7 @@ int main() {
             rs.playerRadius = run.player.radius;
 
             BeginMode3D(camera);
-            DrawLevelScene(currentLevel, rs, camera, &crateModel);
+            DrawLevelScene(ApplyMirrorAngles(currentLevel, run.mirrorAngles), rs, camera, &crateModel);
             EndMode3D();
 
             for (size_t i = 0; i < currentLevel.switches.size(); i++) {

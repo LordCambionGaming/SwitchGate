@@ -98,6 +98,11 @@ Vector2 LevelEditor::WorldToScreen(Vector3 worldPos) const {
     return GetWorldToScreen(worldPos, camera);
 }
 
+float LevelEditor::SnapToGrid(float v) const {
+    if (!gridSnap || gridSize <= 0.0f) return v;
+    return roundf(v / gridSize) * gridSize;
+}
+
 bool LevelEditor::MouseInCanvas() const {
     return CheckCollisionPointRec(GetMousePosition(), canvasRect);
 }
@@ -161,70 +166,74 @@ void LevelEditor::ClearSelection() {
     isDraggingSel = false;
 }
 
-void LevelEditor::PickAt(Vector2 w) {
-    for (int i = (int)working.switches.size() - 1; i >= 0; i--) {
-        const auto& s = working.switches[i];
-        float dx = s.position.x - w.x, dz = s.position.z - w.y;
-        if (dx * dx + dz * dz <= 1.0f) { selType = EditorSelType::SWITCH; selIndex = i; return; }
-    }
-    for (int i = (int)working.emitters.size() - 1; i >= 0; i--) {
-        const auto& e = working.emitters[i];
-        float dx = e.position.x - w.x, dz = e.position.z - w.y;
-        if (dx * dx + dz * dz <= 0.6f * 0.6f) { selType = EditorSelType::EMITTER; selIndex = i; return; }
-    }
-    for (int i = (int)working.receivers.size() - 1; i >= 0; i--) {
-        const auto& r = working.receivers[i];
-        float dx = r.position.x - w.x, dz = r.position.z - w.y;
-        float rad = std::max(0.6f, r.radius);
-        if (dx * dx + dz * dz <= rad * rad) { selType = EditorSelType::RECEIVER; selIndex = i; return; }
-    }
-    for (int i = (int)working.mirrors.size() - 1; i >= 0; i--) {
+void LevelEditor::PickAt() {
+    // Raggio vero dalla camera verso il mouse (non proiettato su un piano
+    // fisso): ogni oggetto viene testato con la sua forma reale, e vince
+    // quello colpito piu' vicino alla camera lungo il raggio - esattamente
+    // come "cosa vedo per primo cliccando li'".
+    Ray ray = GetMouseRay(GetMousePosition(), camera);
+
+    EditorSelType bestType = EditorSelType::NONE;
+    int bestIndex = -1;
+    float bestDist = 1e30f;
+
+    auto considerSphere = [&](Vector3 center, float radius, EditorSelType type, int index) {
+        RayCollision hit = GetRayCollisionSphere(ray, center, radius);
+        if (hit.hit && hit.distance < bestDist) { bestDist = hit.distance; bestType = type; bestIndex = index; }
+    };
+    auto considerBox = [&](Vector3 center, Vector3 size, EditorSelType type, int index) {
+        BoundingBox box = {
+            Vector3{ center.x - size.x / 2.0f, center.y - size.y / 2.0f, center.z - size.z / 2.0f },
+            Vector3{ center.x + size.x / 2.0f, center.y + size.y / 2.0f, center.z + size.z / 2.0f }
+        };
+        RayCollision hit = GetRayCollisionBox(ray, box);
+        if (hit.hit && hit.distance < bestDist) { bestDist = hit.distance; bestType = type; bestIndex = index; }
+    };
+
+    for (int i = 0; i < (int)working.switches.size(); i++)
+        considerBox(working.switches[i].position, Vector3{ 1, 1, 1 }, EditorSelType::SWITCH, i);
+
+    for (int i = 0; i < (int)working.emitters.size(); i++)
+        // Sfera un po' piu' larga del raggio disegnato (0.25) per rendere il click piu' comodo.
+        considerSphere(working.emitters[i].position, 0.45f, EditorSelType::EMITTER, i);
+
+    for (int i = 0; i < (int)working.receivers.size(); i++)
+        considerSphere(working.receivers[i].position, working.receivers[i].radius + 0.2f, EditorSelType::RECEIVER, i);
+
+    for (int i = 0; i < (int)working.mirrors.size(); i++) {
+        // Stesso quadrilatero disegnato in Rendering.cpp per il pannello dello specchio.
         const auto& m = working.mirrors[i];
-        float dx = m.position.x - w.x, dz = m.position.z - w.y;
-        float rad = std::max(0.8f, m.length / 2.0f);
-        if (dx * dx + dz * dz <= rad * rad) { selType = EditorSelType::MIRROR; selIndex = i; return; }
+        Vector3 mDir = DirFromAngleDeg(m.angleDeg);
+        Vector3 half = Vector3Scale(mDir, m.length / 2.0f);
+        Vector3 up = Vector3{ 0, m.height / 2.0f, 0 };
+        Vector3 a = Vector3Subtract(Vector3Subtract(m.position, half), up);
+        Vector3 b = Vector3Add(Vector3Subtract(m.position, half), up);
+        Vector3 c = Vector3Add(Vector3Add(m.position, half), up);
+        Vector3 d = Vector3Subtract(Vector3Add(m.position, half), up);
+        RayCollision hit = GetRayCollisionQuad(ray, a, b, c, d);
+        if (!hit.hit) hit = GetRayCollisionSphere(ray, m.position, 0.4f); // margine se il pannello e' visto di taglio
+        if (hit.hit && hit.distance < bestDist) { bestDist = hit.distance; bestType = EditorSelType::MIRROR; bestIndex = i; }
     }
-    {
-        float dx = working.playerStart.x - w.x, dz = working.playerStart.z - w.y;
-        if (dx * dx + dz * dz <= 1.0f) { selType = EditorSelType::START; selIndex = -1; return; }
-    }
-    {
-        float dx = working.exitPosition.x - w.x, dz = working.exitPosition.z - w.y;
-        float r = working.exitRadius;
-        if (dx * dx + dz * dz <= r * r) { selType = EditorSelType::EXIT; selIndex = -1; return; }
-    }
-    for (int i = (int)working.doors.size() - 1; i >= 0; i--) {
+
+    considerSphere(working.playerStart, 0.6f, EditorSelType::START, -1);
+    considerSphere(working.exitPosition, working.exitRadius + 0.2f, EditorSelType::EXIT, -1);
+
+    for (int i = 0; i < (int)working.doors.size(); i++) {
         const auto& d = working.doors[i];
         Vector3 eff = GetDoorEffectiveSize(d);
-        float halfX = eff.x / 2.0f, halfZ = std::max(0.6f, eff.z / 2.0f);
-        if (fabsf(d.position.x - w.x) <= halfX && fabsf(d.position.z - w.y) <= halfZ) {
-            selType = EditorSelType::DOOR; selIndex = i; return;
-        }
+        Vector3 c = { d.position.x, eff.y / 2.0f, d.position.z };
+        considerBox(c, eff, EditorSelType::DOOR, i);
     }
-    for (int i = (int)working.pads.size() - 1; i >= 0; i--) {
-        const auto& p = working.pads[i];
-        if (fabsf(p.position.x - w.x) <= p.size.x / 2.0f && fabsf(p.position.z - w.y) <= p.size.z / 2.0f) {
-            selType = EditorSelType::PAD; selIndex = i; return;
-        }
-    }
-    for (int i = (int)working.draggables.size() - 1; i >= 0; i--) {
-        const auto& d = working.draggables[i];
-        if (fabsf(d.position.x - w.x) <= d.size.x / 2.0f && fabsf(d.position.z - w.y) <= d.size.z / 2.0f) {
-            selType = EditorSelType::DRAGGABLE; selIndex = i; return;
-        }
-    }
-    for (int i = (int)working.obstacles.size() - 1; i >= 0; i--) {
-        const auto& o = working.obstacles[i];
-        if (fabsf(o.position.x - w.x) <= o.size.x / 2.0f && fabsf(o.position.z - w.y) <= o.size.z / 2.0f) {
-            selType = EditorSelType::OBSTACLE; selIndex = i; return;
-        }
-    }
-    for (int i = (int)working.platforms.size() - 1; i >= 0; i--) {
-        const auto& p = working.platforms[i];
-        if (fabsf(p.position.x - w.x) <= p.size.x / 2.0f && fabsf(p.position.z - w.y) <= p.size.z / 2.0f) {
-            selType = EditorSelType::PLATFORM; selIndex = i; return;
-        }
-    }
+    for (int i = 0; i < (int)working.pads.size(); i++)
+        considerBox(working.pads[i].position, working.pads[i].size, EditorSelType::PAD, i);
+    for (int i = 0; i < (int)working.draggables.size(); i++)
+        considerBox(working.draggables[i].position, working.draggables[i].size, EditorSelType::DRAGGABLE, i);
+    for (int i = 0; i < (int)working.obstacles.size(); i++)
+        considerBox(working.obstacles[i].position, working.obstacles[i].size, EditorSelType::OBSTACLE, i);
+    for (int i = 0; i < (int)working.platforms.size(); i++)
+        considerBox(working.platforms[i].position, working.platforms[i].size, EditorSelType::PLATFORM, i);
+
+    if (bestType != EditorSelType::NONE) { selType = bestType; selIndex = bestIndex; return; }
     ClearSelection();
 }
 
@@ -310,10 +319,12 @@ void LevelEditor::Update() {
     Vector2 mouseScreen = GetMousePosition();
     bool inCanvas = MouseInCanvas();
     Vector2 mw = ScreenToWorld(mouseScreen);
+    mw.x = SnapToGrid(mw.x);
+    mw.y = SnapToGrid(mw.y);
 
     if (tool == EditorTool::SELECT) {
         if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && inCanvas) {
-            PickAt(mw);
+            PickAt();
             if (selType != EditorSelType::NONE) {
                 isDraggingSel = true;
                 float ox = 0, oz = 0;
@@ -353,8 +364,8 @@ void LevelEditor::Update() {
             }
         }
         if (isDraggingSel && IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
-            float nx = Clamp(mw.x + dragOffsetWorld.x, -24.0f, 24.0f);
-            float nz = Clamp(mw.y + dragOffsetWorld.y, -24.0f, 24.0f);
+            float nx = SnapToGrid(Clamp(mw.x + dragOffsetWorld.x, -24.0f, 24.0f));
+            float nz = SnapToGrid(Clamp(mw.y + dragOffsetWorld.y, -24.0f, 24.0f));
             switch (selType) {
                 case EditorSelType::SWITCH:
                     if (selIndex >= 0) { working.switches[selIndex].position.x = nx; working.switches[selIndex].position.z = nz; }
@@ -392,6 +403,21 @@ void LevelEditor::Update() {
 
         if (IsKeyPressed(KEY_DELETE) && !nameActive && !descActive && !switchNameActive) {
             DeleteSelected();
+        }
+
+        // Q / E: ruota di 15 gradi lo specchio o l'emettitore selezionato,
+        // senza dover usare i bottoni +/- nella sidebar.
+        if (!nameActive && !descActive && !switchNameActive) {
+            float rotStep = 0.0f;
+            if (IsKeyPressed(KEY_Q)) rotStep = -15.0f;
+            else if (IsKeyPressed(KEY_E)) rotStep = 15.0f;
+            if (rotStep != 0.0f) {
+                if (selType == EditorSelType::MIRROR && selIndex >= 0 && selIndex < (int)working.mirrors.size()) {
+                    working.mirrors[selIndex].angleDeg = WrapAngle(working.mirrors[selIndex].angleDeg + rotStep);
+                } else if (selType == EditorSelType::EMITTER && selIndex >= 0 && selIndex < (int)working.emitters.size()) {
+                    working.emitters[selIndex].angleDeg = WrapAngle(working.emitters[selIndex].angleDeg + rotStep);
+                }
+            }
         }
     }
     else if (tool == EditorTool::PLATFORM || tool == EditorTool::OBSTACLE || tool == EditorTool::DRAGGABLE) {
@@ -636,6 +662,23 @@ void LevelEditor::DrawSidebar() {
         if (DrawMiniButton(p, "+", LIGHTGRAY, GRAY)) newAngleDeg = WrapAngle(newAngleDeg + 15.0f);
         std::string val = TextFormat("%.0f gradi", newAngleDeg);
         DrawText(val.c_str(), (int)(x + w / 2 - MeasureText(val.c_str(), 16) / 2), (int)y + 4, 16, BLACK);
+        y += 32;
+    }
+
+    DrawText("GRIGLIA (piazzamento/trascinamento)", (int)x, (int)y, 11, DARKGRAY); y += 15;
+    {
+        Rectangle toggle = { x, y, w, 27 };
+        std::string label = std::string("Snap: ") + (gridSnap ? "ON" : "OFF");
+        if (DrawButton(toggle, label.c_str(), 13, gridSnap ? DARKGREEN : DARKGRAY, gridSnap ? GREEN : GRAY, WHITE))
+            gridSnap = !gridSnap;
+        y += 31;
+    }
+    {
+        Rectangle m = { x, y, 28, 26 }, p = { x + w - 28, y, 28, 26 };
+        if (DrawMiniButton(m, "-", LIGHTGRAY, GRAY)) gridSize = std::max(0.25f, gridSize - 0.25f);
+        if (DrawMiniButton(p, "+", LIGHTGRAY, GRAY)) gridSize += 0.25f;
+        std::string val = TextFormat("passo: %.2f", gridSize);
+        DrawText(val.c_str(), (int)(x + w / 2 - MeasureText(val.c_str(), 15) / 2), (int)y + 4, 15, BLACK);
         y += 32;
     }
 
@@ -1023,7 +1066,7 @@ void LevelEditor::DrawSidebar() {
 
     DrawText("Sinistro: crea/sposta.  Destro: ruota vista.", (int)x, 656, 10, GRAY);
     DrawText("Centrale: sposta vista.  Rotella: zoom.", (int)x, 670, 10, GRAY);
-    DrawText("CANC: elimina l'oggetto selezionato.", (int)x, 684, 10, GRAY);
+    DrawText("CANC: elimina.  Q/E: ruota specchio/emettitore.  Griglia: sopra.", (int)x, 684, 10, GRAY);
 }
 
 void LevelEditor::DrawCanvas() {
@@ -1033,11 +1076,24 @@ void LevelEditor::DrawCanvas() {
     BeginScissorMode((int)canvasRect.x, (int)canvasRect.y, (int)canvasRect.width, (int)canvasRect.height);
 
     BeginMode3D(camera);
-        DrawGrid(48, 1.0f);
+        float gridSpacing = gridSnap ? gridSize : 1.0f;
+        int gridSlices = (int)Clamp(48.0f / std::max(0.1f, gridSpacing), 8.0f, 240.0f);
+        DrawGrid(gridSlices, gridSpacing);
 
         SceneRenderState rs = MakeIdleSceneState(working);
         rs.beams = ComputeLightBeams(working, rs.doorHeights, rs.draggablePositions, rs.receiverLit);
         DrawLevelScene(working, rs, camera, nullptr);
+
+        // Marcatore sempre visibile del punto di partenza: prima c'era solo
+        // la scritta 2D "START" sovraimposta, senza alcun oggetto nella scena
+        // 3D, quindi non si vedeva dove cliccare per selezionarlo.
+        {
+            Vector3 basePos = { working.playerStart.x, 0.02f, working.playerStart.z };
+            DrawCylinder(basePos, 0.5f, 0.5f, 0.04f, 16, Fade(GOLD, 0.55f));
+            DrawCylinderWires(basePos, 0.5f, 0.5f, 0.04f, 16, ORANGE);
+            DrawLine3D(Vector3{ working.playerStart.x, 0.0f, working.playerStart.z }, working.playerStart, DARKGRAY);
+            DrawSphere(working.playerStart, 0.3f, ORANGE);
+        }
 
         // Contorno dorato sull'oggetto selezionato
         switch (selType) {
@@ -1101,6 +1157,8 @@ void LevelEditor::DrawCanvas() {
         // Anteprima del box mentre si trascina per crearne uno nuovo
         if (isDraggingNew && (tool == EditorTool::PLATFORM || tool == EditorTool::OBSTACLE || tool == EditorTool::DRAGGABLE)) {
             Vector2 cur = ScreenToWorld(GetMousePosition());
+            cur.x = SnapToGrid(cur.x);
+            cur.y = SnapToGrid(cur.y);
             float minX = std::min(dragStartWorld.x, cur.x), maxX = std::max(dragStartWorld.x, cur.x);
             float minZ = std::min(dragStartWorld.y, cur.y), maxZ = std::max(dragStartWorld.y, cur.y);
             float cx = (minX + maxX) / 2.0f, cz = (minZ + maxZ) / 2.0f;

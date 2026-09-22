@@ -122,10 +122,15 @@ std::vector<LightBeamSegment> ComputeLightBeams(const LevelData& level,
             }
 
             for (size_t d = 0; d < level.doors.size(); d++) {
-                if (d < doorHeights.size() && doorHeights[d] <= 0.1f) continue; // porta aperta: non blocca
+                // Altezza ANIMATA attuale della porta (quella che si vede rimpicciolire
+                // mentre sprofonda nel pavimento), non quella statica configurata: cosi'
+                // il raggio passa sopra la porta non appena questa e' scesa sotto la sua
+                // quota, invece di restare bloccato finche' non e' quasi del tutto aperta.
+                float h = (d < doorHeights.size()) ? doorHeights[d] : level.doors[d].size.y;
+                if (h <= 0.1f) continue; // porta aperta: non blocca
                 const auto& door = level.doors[d];
                 Vector3 sz = GetDoorEffectiveSize(door);
-                if (pos.y > door.position.y + sz.y) continue;
+                if (pos.y > door.position.y + h) continue;
                 float t = RayBoxHitXZ(pos, dir,
                                        door.position.x - sz.x / 2.0f, door.position.x + sz.x / 2.0f,
                                        door.position.z - sz.z / 2.0f, door.position.z + sz.z / 2.0f);

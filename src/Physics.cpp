@@ -6,7 +6,7 @@ const float GRAVITY = -24.0f;
 const float JUMP_SPEED = 9.0f;
 const float MOVE_SPEED = 6.0f;
 
-bool FindGroundY(const LevelData& level, float x, float z, float& outY) {
+bool FindGroundY(const LevelData& level, float x, float z, float maxY, float& outY) {
     bool found = false;
     float best = -1e9f;
     for (const auto& p : level.platforms) {
@@ -14,7 +14,30 @@ bool FindGroundY(const LevelData& level, float x, float z, float& outY) {
         float minZ = p.position.z - p.size.z / 2.0f, maxZ = p.position.z + p.size.z / 2.0f;
         if (x >= minX && x <= maxX && z >= minZ && z <= maxZ) {
             float top = p.position.y + p.size.y / 2.0f;
+            if (top > maxY) continue; // sopra la quota su cui si poteva gia' essere appoggiati: ignorala
             if (!found || top > best) { best = top; found = true; }
+        }
+    }
+    outY = best;
+    return found;
+}
+
+// Speculare a FindGroundY: trova il bordo INFERIORE piu' basso tra le
+// piattaforme sopra un punto (x, z), considerando solo quelle il cui fondo
+// non e' piu' basso di minY (la quota della testa prima del passo di fisica
+// corrente). Senza questo controllo, saltando da sotto una piattaforma la si
+// attraverserebbe: il fondo verrebbe ignorato finche' non si e' gia' sopra,
+// e poi FindGroundY vi si "appoggerebbe" da sopra come se nulla fosse.
+bool FindCeilingY(const LevelData& level, float x, float z, float minY, float& outY) {
+    bool found = false;
+    float best = 1e9f;
+    for (const auto& p : level.platforms) {
+        float minX = p.position.x - p.size.x / 2.0f, maxX = p.position.x + p.size.x / 2.0f;
+        float minZ = p.position.z - p.size.z / 2.0f, maxZ = p.position.z + p.size.z / 2.0f;
+        if (x >= minX && x <= maxX && z >= minZ && z <= maxZ) {
+            float bottom = p.position.y - p.size.y / 2.0f;
+            if (bottom < minY) continue; // sotto la quota della testa prima di questo passo: non e' un soffitto valido
+            if (!found || bottom < best) { best = bottom; found = true; }
         }
     }
     outY = best;
@@ -100,6 +123,12 @@ void UpdatePlayerPhysics(Player& player, const LevelData& level, const std::vect
     player.position.x = Clamp(player.position.x, -19.5f, 19.5f);
     player.position.z = Clamp(player.position.z, -19.5f, 19.5f);
 
+    // Quota dei piedi e della testa PRIMA di applicare la gravita' di questo
+    // frame: servono a limitare FindGroundY/FindCeilingY alle sole superfici
+    // su cui si poteva gia' essere appoggiati/sotto (vedi commenti in Physics.h).
+    float prevFeetY = player.position.y - player.radius;
+    float prevHeadY = player.position.y + player.radius;
+
     if (level.gravityEnabled) {
         player.velocity.y += GRAVITY * dt;
     } else {
@@ -107,8 +136,18 @@ void UpdatePlayerPhysics(Player& player, const LevelData& level, const std::vect
     }
     player.position.y += player.velocity.y * dt;
 
+    // Soffitto: se si sta salendo (salto) e la testa arriva al fondo di una
+    // piattaforma che prima era sopra la testa, ci si ferma li' invece di
+    // attraversarla.
+    float ceilY;
+    bool hasCeiling = FindCeilingY(level, player.position.x, player.position.z, prevHeadY - 0.05f, ceilY);
+    if (hasCeiling && player.velocity.y > 0.0f && (player.position.y + player.radius) >= ceilY) {
+        player.position.y = ceilY - player.radius;
+        player.velocity.y = 0.0f;
+    }
+
     float groundY;
-    bool hasGround = FindGroundY(level, player.position.x, player.position.z, groundY);
+    bool hasGround = FindGroundY(level, player.position.x, player.position.z, prevFeetY + 0.05f, groundY);
     float feetY = player.position.y - player.radius;
 
     if (hasGround && feetY <= groundY && player.velocity.y <= 0.0f) {

@@ -39,6 +39,13 @@ private:
     int colorIndex = 0;
     float sidebarScroll = 0.0f;
 
+    // Snap a griglia: arrotonda le coordinate X/Z (piazzamento e trascinamento)
+    // al multiplo piu' vicino di gridSize, per rendere facile allineare gli
+    // oggetti e costruire livelli simmetrici invece di piazzare tutto a mano libera.
+    bool gridSnap = true;
+    float gridSize = 1.0f;
+    float SnapToGrid(float v) const;
+
     bool nameActive = false;
     bool descActive = false;
     bool fileNameActive = false;
@@ -85,7 +92,14 @@ private:
     void SetStatus(const std::string& msg, bool isError);
     void ClearSelection();
     void DeleteSelected();
-    void PickAt(Vector2 worldPos);
+
+    // Seleziona l'oggetto sotto al mouse lanciando un raggio 3D vero e
+    // proprio dalla camera (stessa idea del "click" in un motore 3D): ogni
+    // oggetto viene testato con la sua forma reale (sfera, box o pannello),
+    // non con una proiezione sul piano y=0. Cosi' funziona bene con la
+    // camera inclinata e anche cliccando sulla parte alta di un oggetto
+    // (es. il bordo superiore di una porta) invece che solo vicino a terra.
+    void PickAt();
 
     void DrawTopBar();
     void DrawSidebar();
