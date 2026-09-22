@@ -25,10 +25,14 @@ struct LightBeamSegment {
 Vector3 DirFromAngleDeg(float angleDeg);
 
 // Calcola il tragitto (con eventuali riflessioni sugli specchi) di ogni
-// emettitore del livello, fermandosi a ostacoli/porte chiuse o al primo
-// ricevitore colpito. Riempie 'receiverLit' (un bool per ogni ricevitore:
-// true se in quel momento e' illuminato da un raggio del colore giusto) e
-// ritorna i segmenti da disegnare.
+// emettitore del livello, fermandosi a ostacoli/porte chiuse/casse o al
+// primo ricevitore colpito. 'draggablePositions' sono le posizioni ATTUALI
+// delle casse trascinabili (non quelle di partenza salvate nel livello):
+// una cassa spinta davanti a uno specchio blocca il raggio esattamente come
+// un muro. Riempie 'receiverLit' (un bool per ogni ricevitore: true se in
+// quel momento e' illuminato da un raggio del colore giusto) e ritorna i
+// segmenti da disegnare.
 std::vector<LightBeamSegment> ComputeLightBeams(const LevelData& level,
                                                  const std::vector<float>& doorHeights,
+                                                 const std::vector<Vector3>& draggablePositions,
                                                  std::vector<bool>& receiverLit);

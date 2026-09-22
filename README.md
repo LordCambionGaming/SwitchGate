@@ -33,7 +33,25 @@
 
 ## Creazione Livelli (JSON)
 
-I livelli personalizzati possono essere creati tramite l'editor interno o scritti manualmente in formato JSON all'interno della cartella `levels/`. 
+I livelli personalizzati possono essere creati tramite l'editor interno o scritti manualmente in formato JSON all'interno della cartella `levels/`.
+
+### Editor livelli (vista 3D)
+
+L'editor mostra il livello in una vera scena 3D (la stessa identica resa
+grafica del gioco, specchi e fasci di luce inclusi, aggiornati in tempo
+reale man mano che sposti gli oggetti), non piu' una mappa piatta vista
+dall'alto:
+
+- **Click sinistro**: seleziona/sposta un oggetto, oppure crea un nuovo
+  oggetto con lo strumento attivo (trascina per piattaforme/ostacoli/casse).
+- **Trascina col tasto destro**: ruota la visuale attorno al livello.
+- **Trascina col tasto centrale**: sposta il punto di osservazione.
+- **Rotella del mouse**: zoom in/out.
+- **CANC**: elimina l'oggetto selezionato.
+
+L'altezza dei nuovi oggetti e l'angolo di specchi/emettitori si impostano
+dai controlli "+/-" nella barra laterale prima di piazzarli; una volta
+piazzati si possono affinare dal pannello "OGGETTO SELEZIONATO".
 
 Esempio di struttura di base per una porta logica `AND` collegata a più interruttori:
 

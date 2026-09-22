@@ -64,6 +64,7 @@ static float RayCircleHitXZ(Vector3 origin, Vector3 dir, Vector3 center, float r
 
 std::vector<LightBeamSegment> ComputeLightBeams(const LevelData& level,
                                                  const std::vector<float>& doorHeights,
+                                                 const std::vector<Vector3>& draggablePositions,
                                                  std::vector<bool>& receiverLit) {
     std::vector<LightBeamSegment> segments;
     receiverLit.assign(level.receivers.size(), false);
@@ -104,6 +105,19 @@ std::vector<LightBeamSegment> ComputeLightBeams(const LevelData& level,
                 float t = RayBoxHitXZ(pos, dir,
                                        o.position.x - o.size.x / 2.0f, o.position.x + o.size.x / 2.0f,
                                        o.position.z - o.size.z / 2.0f, o.position.z + o.size.z / 2.0f);
+                if (t > 0.01f && t < bestT) { bestT = t; hitType = Hit::Block; hitIndex = -1; }
+            }
+
+            // Le casse trascinabili bloccano il raggio nella loro posizione
+            // ATTUALE (il giocatore le puo' spingere), non in quella di
+            // partenza salvata nel livello.
+            for (size_t c = 0; c < level.draggables.size() && c < draggablePositions.size(); c++) {
+                Vector3 cp = draggablePositions[c];
+                Vector3 cs = level.draggables[c].size;
+                if (pos.y < cp.y - cs.y / 2.0f || pos.y > cp.y + cs.y / 2.0f) continue;
+                float t = RayBoxHitXZ(pos, dir,
+                                       cp.x - cs.x / 2.0f, cp.x + cs.x / 2.0f,
+                                       cp.z - cs.z / 2.0f, cp.z + cs.z / 2.0f);
                 if (t > 0.01f && t < bestT) { bestT = t; hitType = Hit::Block; hitIndex = -1; }
             }
 

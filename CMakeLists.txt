@@ -35,6 +35,7 @@ add_executable(${PROJECT_NAME}
     src/Level.cpp
     src/Physics.cpp
     src/Lighting.cpp
+    src/Rendering.cpp
     src/Config.cpp
     src/Scores.cpp
     src/Editor.cpp

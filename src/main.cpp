@@ -3,6 +3,7 @@
 #include "Level.h"
 #include "Physics.h"
 #include "Lighting.h"
+#include "Rendering.h"
 #include "Config.h"
 #include "Scores.h"
 #include "Editor.h"
@@ -24,31 +25,6 @@
 
 
 enum class GameState { MENU, LEVEL_SELECT, PLAYING, HELP, SETTINGS, EDITOR };
-
-static const float RENDER_DISTANCE = 60.0f;
-
-// True se un oggetto (approssimato a una sfera) puo' ricadere nel campo visivo
-// della camera: usato per saltare del tutto la chiamata DrawCube per tutto
-// cio' che e' troppo lontano o fuori dal cono di vista, invece di mandarlo
-// alla scheda video e farlo scartare li'.
-static bool IsVisibleToCamera(const Camera3D& camera, Vector3 objPos, float objRadius) {
-    Vector3 toObj = Vector3Subtract(objPos, camera.position);
-    float dist = Vector3Length(toObj);
-    if (dist > RENDER_DISTANCE + objRadius) return false;
-    if (dist < 0.001f) return true;
-
-    Vector3 forward = Vector3Normalize(Vector3Subtract(camera.target, camera.position));
-    Vector3 dirToObj = Vector3Scale(toObj, 1.0f / dist);
-    float cosAngle = Vector3DotProduct(forward, dirToObj);
-
-    // Margine generoso oltre il campo visivo verticale: copre anche
-    // l'estensione orizzontale (piu' ampia, essendo lo schermo 16:9) e la
-    // dimensione dell'oggetto stesso, cosi' non sparisce troppo presto ai
-    // bordi dello schermo.
-    float halfFovRad = (camera.fovy * 0.5f + 25.0f) * DEG2RAD;
-    float angleMargin = atanf(objRadius / dist);
-    return cosAngle > cosf(halfFovRad + angleMargin);
-}
 
 
 // Stato di una partita in corso (indipendente dal livello, si resetta a ogni R)
@@ -385,7 +361,7 @@ int main() {
                 run.padPressed[i] = pressed;
             }
 
-            run.beams = ComputeLightBeams(currentLevel, run.doorHeights, run.receiverLit);
+            run.beams = ComputeLightBeams(currentLevel, run.doorHeights, run.draggablePos, run.receiverLit);
 
             // aggiornamento porte and / or
             for (size_t i = 0; i < currentLevel.doors.size(); i++) {
@@ -863,106 +839,20 @@ int main() {
             }
         }
         else if (state == GameState::PLAYING) {
+            SceneRenderState rs;
+            rs.doorHeights = run.doorHeights;
+            rs.switchActivated = run.activated;
+            rs.padPressed = run.padPressed;
+            rs.receiverLit = run.receiverLit;
+            rs.beams = run.beams;
+            rs.draggablePositions = run.draggablePos;
+            rs.exitOpen = run.solved;
+            rs.showPlayer = true;
+            rs.playerPosition = run.player.position;
+            rs.playerRadius = run.player.radius;
+
             BeginMode3D(camera);
-
-            for (const auto& p : currentLevel.platforms) {
-                float radius = Vector3Length(Vector3Scale(p.size, 0.5f));
-                if (!IsVisibleToCamera(camera, p.position, radius)) continue;
-                DrawCube(p.position, p.size.x, p.size.y, p.size.z, p.color);
-                DrawCubeWires(p.position, p.size.x, p.size.y, p.size.z, Fade(BLACK, 0.25f));
-            }
-            for (const auto& o : currentLevel.obstacles) {
-                float radius = Vector3Length(Vector3Scale(o.size, 0.5f));
-                if (!IsVisibleToCamera(camera, o.position, radius)) continue;
-                DrawCube(o.position, o.size.x, o.size.y, o.size.z, o.color);
-                DrawCubeWires(o.position, o.size.x, o.size.y, o.size.z, DARKGRAY);
-            }
-            for (size_t i = 0; i < currentLevel.draggables.size(); i++) {
-                Vector3 dp = run.draggablePos[i];
-                Vector3 ds = currentLevel.draggables[i].size;
-                float radius = Vector3Length(Vector3Scale(ds, 0.5f));
-                if (!IsVisibleToCamera(camera, dp, radius)) continue;
-                DrawModelEx(crateModel, dp, Vector3{ 0, 1, 0 }, 0.0f, ds, currentLevel.draggables[i].color);
-                DrawCubeWires(dp, ds.x, ds.y, ds.z, BLACK);
-            }
-
-            for (size_t i = 0; i < currentLevel.pads.size(); i++) {
-                const LevelPad& pad = currentLevel.pads[i];
-                if (!IsVisibleToCamera(camera, pad.position, pad.size.x)) continue;
-                Color c = run.padPressed[i] ? pad.color : Fade(pad.color, 0.45f);
-                DrawCube(pad.position, pad.size.x, pad.size.y, pad.size.z, c);
-                DrawCubeWires(pad.position, pad.size.x, pad.size.y, pad.size.z, DARKGRAY);
-            }
-
-            for (size_t i = 0; i < currentLevel.switches.size(); i++) {
-                const auto& s = currentLevel.switches[i];
-                if (!IsVisibleToCamera(camera, s.position, 0.87f)) continue;
-                Color c = run.activated[i] ? s.color : Fade(s.color, 0.4f);
-                DrawCube(s.position, 1, 1, 1, c);
-                DrawCubeWires(s.position, 1, 1, 1, DARKGRAY);
-            }
-
-            for (size_t i = 0; i < currentLevel.doors.size(); i++) {
-                const auto& door = currentLevel.doors[i];
-                float h = run.doorHeights[i];
-                if (h <= 0.01f) continue;
-                Vector3 effSize = GetDoorEffectiveSize(door);
-                Vector3 dp = { door.position.x, h / 2.0f, door.position.z };
-                DrawCube(dp, effSize.x, h, effSize.z, door.color);
-                DrawCubeWires(dp, effSize.x, h, effSize.z, BLACK);
-            }
-
-            for (const auto& mir : currentLevel.mirrors) {
-                if (!IsVisibleToCamera(camera, mir.position, mir.length)) continue;
-                Vector3 mDir = DirFromAngleDeg(mir.angleDeg);
-                // Pannello sottile orientato lungo mDir: DrawCubeV non supporta la
-                // rotazione, quindi lo disegniamo "a mano" come due triangoli.
-                Vector3 half = Vector3Scale(mDir, mir.length / 2.0f);
-                Vector3 up = Vector3{ 0, mir.height / 2.0f, 0 };
-                Vector3 a = Vector3Subtract(Vector3Subtract(mir.position, half), up);
-                Vector3 b = Vector3Add(Vector3Subtract(mir.position, half), up);
-                Vector3 c = Vector3Add(Vector3Add(mir.position, half), up);
-                Vector3 d = Vector3Subtract(Vector3Add(mir.position, half), up);
-                DrawTriangle3D(a, b, c, mir.color);
-                DrawTriangle3D(a, c, d, mir.color);
-                DrawTriangle3D(a, c, b, mir.color);
-                DrawTriangle3D(a, d, c, mir.color);
-                DrawLine3D(a, b, DARKGRAY); DrawLine3D(b, c, DARKGRAY);
-                DrawLine3D(c, d, DARKGRAY); DrawLine3D(d, a, DARKGRAY);
-            }
-
-            for (const auto& em : currentLevel.emitters) {
-                if (!IsVisibleToCamera(camera, em.position, 0.5f)) continue;
-                DrawSphere(em.position, 0.25f, em.color);
-                DrawSphereWires(em.position, 0.25f, 6, 6, BLACK);
-            }
-
-            for (size_t i = 0; i < currentLevel.receivers.size(); i++) {
-                const auto& rec = currentLevel.receivers[i];
-                if (!IsVisibleToCamera(camera, rec.position, rec.radius + 0.3f)) continue;
-                bool lit = i < run.receiverLit.size() && run.receiverLit[i];
-                Color c = lit ? rec.color : Fade(rec.color, 0.35f);
-                DrawSphere(rec.position, rec.radius, c);
-                DrawSphereWires(rec.position, rec.radius, 8, 8, DARKGRAY);
-            }
-
-            // I fasci si disegnano come piu' linee leggermente sfalsate, per dare
-            // un minimo effetto di "bagliore" senza bisogno di shader dedicati.
-            for (const auto& seg : run.beams) {
-                Color glow = Fade(seg.color, 0.35f);
-                for (float off : { -0.03f, 0.03f }) {
-                    DrawLine3D(Vector3{ seg.a.x, seg.a.y + off, seg.a.z },
-                               Vector3{ seg.b.x, seg.b.y + off, seg.b.z }, glow);
-                }
-                DrawLine3D(seg.a, seg.b, seg.color);
-            }
-
-            DrawCircle3D(currentLevel.exitPosition, currentLevel.exitRadius, Vector3{ 1, 0, 0 }, 90.0f,
-                          run.solved ? GREEN : GRAY);
-
-            DrawSphere(run.player.position, run.player.radius, ORANGE);
-            DrawSphereWires(run.player.position, run.player.radius, 8, 8, MAROON);
-
+            DrawLevelScene(currentLevel, rs, camera, &crateModel);
             EndMode3D();
 
             for (size_t i = 0; i < currentLevel.switches.size(); i++) {

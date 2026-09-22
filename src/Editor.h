@@ -4,8 +4,8 @@
 #include <string>
 #include <vector>
 
-enum class EditorTool { SELECT, PLATFORM, OBSTACLE, DRAGGABLE, SWITCH, START, DOOR, PAD, EXIT };
-enum class EditorSelType { NONE, PLATFORM, OBSTACLE, DRAGGABLE, SWITCH, START, DOOR, PAD, EXIT };
+enum class EditorTool { SELECT, PLATFORM, OBSTACLE, DRAGGABLE, SWITCH, START, DOOR, PAD, MIRROR, EMITTER, RECEIVER, EXIT };
+enum class EditorSelType { NONE, PLATFORM, OBSTACLE, DRAGGABLE, SWITCH, START, DOOR, PAD, MIRROR, EMITTER, RECEIVER, EXIT };
 
 class LevelEditor {
 public:
@@ -35,6 +35,7 @@ private:
 
     float newPlatformTopY = 0.0f;
     float newObstacleHeight = 3.0f;
+    float newAngleDeg = 45.0f;     // angolo di default per nuovi specchi/emettitori
     int colorIndex = 0;
     float sidebarScroll = 0.0f;
 
@@ -56,13 +57,30 @@ private:
     bool exitRequested = false;
 
     Rectangle canvasRect{ 240, 108, 1010, 560 };
-    float scale = 10.0f;
-    Vector2 canvasCenter{ 0, 0 };
 
-    Vector2 WorldToScreen(float x, float z) const;
+    // Vista 3D del canvas: camera "a orbita" attorno a un punto (camTarget),
+    // ruotabile e zoomabile, invece della vecchia proiezione ortogonale
+    // dall'alto disegnata a mano con rettangoli 2D.
+    Camera3D camera{};
+    float camYaw = 35.0f;      // gradi, rotazione orizzontale attorno al target
+    float camPitch = 55.0f;    // gradi, 0 = orizzontale, 90 = dall'alto
+    float camDistance = 30.0f;
+    Vector3 camTarget{ 0, 0, 0 };
+    bool isOrbiting = false;
+    bool isPanning = false;
+    Vector2 lastCamMouse{ 0, 0 };
+
+    void UpdateCameraFromOrbit();
+    void UpdateCameraControls();
+
+    // Converte la posizione del mouse in una coordinata (x, z) sul piano
+    // orizzontale y=0, proiettando un raggio dalla camera 3D: sostituisce la
+    // vecchia mappatura piatta scala/offset, ma restituisce lo stesso tipo
+    // (Vector2 dove .x = x mondo, .y = z mondo) cosi' il resto del codice di
+    // interazione (selezione, trascinamento, creazione) resta invariato.
     Vector2 ScreenToWorld(Vector2 screen) const;
+    Vector2 WorldToScreen(Vector3 worldPos) const;
     bool MouseInCanvas() const;
-    void RecalcCanvas();
 
     void SetStatus(const std::string& msg, bool isError);
     void ClearSelection();
