@@ -1,4 +1,5 @@
 {
+  "name": "Livello 5 - Porta AND",
   "description": "Spingi le casse sulle pedane rosse contemporaneamente per attivare la porta e premi l'interruttore.",
   "doors": [
     {
@@ -59,7 +60,6 @@
   },
   "fall_reset_y": -8.0,
   "gravity": true,
-  "name": "livello5_Port&",
   "obstacles": [
     {
       "color": "red",
@@ -107,12 +107,12 @@
       "linked_door": 0,
       "position": [
         -7.628570556640625,
-        0.05000000074505806,
+        0.05,
         4.885714054107666
       ],
       "size": [
         1.5,
-        0.10000000149011612,
+        0.1,
         1.5
       ]
     },
@@ -121,12 +121,12 @@
       "linked_door": 0,
       "position": [
         -7.885714054107666,
-        0.05000000074505806,
+        0.05,
         -2.828571319580078
       ],
       "size": [
         1.5,
-        0.10000000149011612,
+        0.1,
         1.5
       ]
     }

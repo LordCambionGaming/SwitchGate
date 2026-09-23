@@ -1,4 +1,5 @@
 {
+  "name": "Livello 6 - Scatola Cadente",
   "description": "Spingi la cassa rossa oltre il bordo della piattaforma sopraelevata: cadendo atterrera' sulla pedana sottostante e apri la porta.",
   "doors": [
     {
@@ -46,7 +47,6 @@
   "fall_reset_y": -8.0,
   "gravity": true,
   "mirrors": [],
-  "name": "level6_falling_box",
   "obstacles": [
     {
       "color": "red",
@@ -60,6 +60,32 @@
         3.0,
         8.0
       ]
+    },
+    {
+      "color": "brown",
+      "position": [
+        -3.0,
+        2.0,
+        -0.5
+      ],
+      "size": [
+        4.0,
+        4.0,
+        0.5
+      ]
+    },
+    {
+      "color": "brown",
+      "position": [
+        3.0,
+        2.0,
+        -0.5
+      ],
+      "size": [
+        4.0,
+        4.0,
+        0.5
+      ]
     }
   ],
   "pads": [
@@ -68,12 +94,12 @@
       "linked_door": 0,
       "position": [
         -2.0,
-        0.05000000074505806,
+        0.05,
         4.0
       ],
       "size": [
         1.5,
-        0.10000000149011612,
+        0.1,
         1.5
       ]
     }

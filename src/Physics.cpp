@@ -14,7 +14,7 @@ bool FindGroundY(const LevelData& level, float x, float z, float maxY, float& ou
         float minZ = p.position.z - p.size.z / 2.0f, maxZ = p.position.z + p.size.z / 2.0f;
         if (x >= minX && x <= maxX && z >= minZ && z <= maxZ) {
             float top = p.position.y + p.size.y / 2.0f;
-            if (top > maxY) continue; // sopra la quota su cui si poteva gia' essere appoggiati: ignorala
+            if (top > maxY) continue;
             if (!found || top > best) { best = top; found = true; }
         }
     }
@@ -22,12 +22,6 @@ bool FindGroundY(const LevelData& level, float x, float z, float maxY, float& ou
     return found;
 }
 
-// Speculare a FindGroundY: trova il bordo INFERIORE piu' basso tra le
-// piattaforme sopra un punto (x, z), considerando solo quelle il cui fondo
-// non e' piu' basso di minY (la quota della testa prima del passo di fisica
-// corrente). Senza questo controllo, saltando da sotto una piattaforma la si
-// attraverserebbe: il fondo verrebbe ignorato finche' non si e' gia' sopra,
-// e poi FindGroundY vi si "appoggerebbe" da sopra come se nulla fosse.
 bool FindCeilingY(const LevelData& level, float x, float z, float minY, float& outY) {
     bool found = false;
     float best = 1e9f;
@@ -36,7 +30,7 @@ bool FindCeilingY(const LevelData& level, float x, float z, float minY, float& o
         float minZ = p.position.z - p.size.z / 2.0f, maxZ = p.position.z + p.size.z / 2.0f;
         if (x >= minX && x <= maxX && z >= minZ && z <= maxZ) {
             float bottom = p.position.y - p.size.y / 2.0f;
-            if (bottom < minY) continue; // sotto la quota della testa prima di questo passo: non e' un soffitto valido
+            if (bottom < minY) continue;
             if (!found || bottom < best) { best = bottom; found = true; }
         }
     }
@@ -45,10 +39,6 @@ bool FindCeilingY(const LevelData& level, float x, float z, float minY, float& o
 }
 
 void ResolveBoxCollision(Vector3& pos, float radius, Vector3 boxPos, Vector3 boxSize) {
-    // Se la sfera del giocatore (o della cassa) non si sovrappone verticalmente
-    // col box, non lo blocca: prima questo controllo mancava del tutto, quindi
-    // ogni "muro" si comportava come se fosse alto all'infinito, bloccando
-    // anche chi ci saltava sopra.
     float boxMinY = boxPos.y - boxSize.y / 2.0f;
     float boxMaxY = boxPos.y + boxSize.y / 2.0f;
     if (pos.y + radius <= boxMinY || pos.y - radius >= boxMaxY) return;
@@ -115,17 +105,15 @@ void ResolveObstacles(Vector3& pos, float radius, const std::vector<LevelBox>& o
 void ResolveDoors(Vector3& pos, float radius, const std::vector<LevelDoor>& doors, const std::vector<float>& doorHeights) {
     for (size_t i = 0; i < doors.size(); i++) {
         if (i < doorHeights.size() && doorHeights[i] <= 0.1f) continue;
-        // door.position.y e' la base della porta (vedi Rendering.cpp): il box
-        // di collisione va centrato a base + meta' altezza, non su door.position.y
-        // direttamente, altrimenti non corrisponde a dove la porta e' disegnata.
         Vector3 sz = GetDoorEffectiveSize(doors[i]);
+        // Aumenta l'altezza verticale del collider della porta verso l'alto per evitare che il giocatore possa saltarci sopra
+        sz.y += 10.0f;
         Vector3 center = { doors[i].position.x, doors[i].position.y + sz.y / 2.0f, doors[i].position.z };
         ResolveBoxCollision(pos, radius, center, sz);
     }
 }
 
 void UpdatePlayerPhysics(Player& player, const LevelData& level, const std::vector<float>& doorHeights, Vector3 moveInput, float dt, bool jumpPressed) {
-    // Movimento orizzontale
     if (moveInput.x != 0.0f || moveInput.z != 0.0f) {
         moveInput = Vector3Normalize(moveInput);
         player.position.x += moveInput.x * MOVE_SPEED * dt;
@@ -136,9 +124,6 @@ void UpdatePlayerPhysics(Player& player, const LevelData& level, const std::vect
     player.position.x = Clamp(player.position.x, -19.5f, 19.5f);
     player.position.z = Clamp(player.position.z, -19.5f, 19.5f);
 
-    // Quota dei piedi e della testa PRIMA di applicare la gravita' di questo
-    // frame: servono a limitare FindGroundY/FindCeilingY alle sole superfici
-    // su cui si poteva gia' essere appoggiati/sotto (vedi commenti in Physics.h).
     float prevFeetY = player.position.y - player.radius;
     float prevHeadY = player.position.y + player.radius;
 
@@ -149,9 +134,6 @@ void UpdatePlayerPhysics(Player& player, const LevelData& level, const std::vect
     }
     player.position.y += player.velocity.y * dt;
 
-    // Soffitto: se si sta salendo (salto) e la testa arriva al fondo di una
-    // piattaforma che prima era sopra la testa, ci si ferma li' invece di
-    // attraversarla.
     float ceilY;
     bool hasCeiling = FindCeilingY(level, player.position.x, player.position.z, prevHeadY - 0.05f, ceilY);
     if (hasCeiling && player.velocity.y > 0.0f && (player.position.y + player.radius) >= ceilY) {
@@ -176,7 +158,6 @@ void UpdatePlayerPhysics(Player& player, const LevelData& level, const std::vect
         player.onGround = false;
     }
 
-    // Caduto in un pozzo (vuoto tra piattaforme): torna al punto di partenza.
     if (player.position.y < level.fallResetY) {
         player.position = level.playerStart;
         player.velocity = { 0, 0, 0 };
