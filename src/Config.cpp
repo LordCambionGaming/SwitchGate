@@ -113,6 +113,8 @@ bool LoadKeyBindings(const std::string& path, KeyBindings& out) {
     readKey("rotate_left", kb.rotateLeft);
     readKey("rotate_right", kb.rotateRight);
     readKey("hint", kb.hint);
+    readKey("rotate_mirror_left", kb.rotateMirrorLeft);
+    readKey("rotate_mirror_right", kb.rotateMirrorRight);
     if (j.contains("colorblind_mode") && j["colorblind_mode"].is_boolean()) {
         kb.colorblindMode = j["colorblind_mode"].get<bool>();
     }
@@ -138,6 +140,8 @@ bool SaveKeyBindings(const std::string& path, const KeyBindings& kb) {
     j["rotate_left"] = KeyToName(kb.rotateLeft);
     j["rotate_right"] = KeyToName(kb.rotateRight);
     j["hint"] = KeyToName(kb.hint);
+    j["rotate_mirror_left"] = KeyToName(kb.rotateMirrorLeft);
+    j["rotate_mirror_right"] = KeyToName(kb.rotateMirrorRight);
     j["colorblind_mode"] = kb.colorblindMode;
     j["mouse_sensitivity"] = kb.mouseSensitivity;
 

@@ -45,6 +45,14 @@ bool FindCeilingY(const LevelData& level, float x, float z, float minY, float& o
 }
 
 void ResolveBoxCollision(Vector3& pos, float radius, Vector3 boxPos, Vector3 boxSize) {
+    // Se la sfera del giocatore (o della cassa) non si sovrappone verticalmente
+    // col box, non lo blocca: prima questo controllo mancava del tutto, quindi
+    // ogni "muro" si comportava come se fosse alto all'infinito, bloccando
+    // anche chi ci saltava sopra.
+    float boxMinY = boxPos.y - boxSize.y / 2.0f;
+    float boxMaxY = boxPos.y + boxSize.y / 2.0f;
+    if (pos.y + radius <= boxMinY || pos.y - radius >= boxMaxY) return;
+
     float minX = boxPos.x - boxSize.x / 2.0f - radius;
     float maxX = boxPos.x + boxSize.x / 2.0f + radius;
     float minZ = boxPos.z - boxSize.z / 2.0f - radius;
@@ -107,7 +115,12 @@ void ResolveObstacles(Vector3& pos, float radius, const std::vector<LevelBox>& o
 void ResolveDoors(Vector3& pos, float radius, const std::vector<LevelDoor>& doors, const std::vector<float>& doorHeights) {
     for (size_t i = 0; i < doors.size(); i++) {
         if (i < doorHeights.size() && doorHeights[i] <= 0.1f) continue;
-        ResolveBoxCollision(pos, radius, doors[i].position, GetDoorEffectiveSize(doors[i]));
+        // door.position.y e' la base della porta (vedi Rendering.cpp): il box
+        // di collisione va centrato a base + meta' altezza, non su door.position.y
+        // direttamente, altrimenti non corrisponde a dove la porta e' disegnata.
+        Vector3 sz = GetDoorEffectiveSize(doors[i]);
+        Vector3 center = { doors[i].position.x, doors[i].position.y + sz.y / 2.0f, doors[i].position.z };
+        ResolveBoxCollision(pos, radius, center, sz);
     }
 }
 

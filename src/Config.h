@@ -14,6 +14,8 @@ struct KeyBindings {
     int rotateLeft = 263;  // FRECCIA SINISTRA
     int rotateRight = 262; // FRECCIA DESTRA
     int hint = 72;          // H
+    int rotateMirrorLeft = 81;  // Q - ruota lo specchio/emettitore piu' vicino (antiorario)
+    int rotateMirrorRight = 69; // E - ruota lo specchio/emettitore piu' vicino (orario)
     float mouseSensitivity = 1.0f;
     bool colorblindMode = false;
 };

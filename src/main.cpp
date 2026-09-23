@@ -283,18 +283,23 @@ int main() {
                     if (d2 < nearestDistSq) { nearestDistSq = d2; nearestMirror = (int)i; }
                 }
                 if (nearestMirror >= 0) {
-                    if (IsKeyPressed(KEY_Q)) run.targetMirrorAngles[nearestMirror] -= 45.0f;
-                    if (IsKeyPressed(KEY_E)) run.targetMirrorAngles[nearestMirror] += 45.0f;
+                    // Ogni pressione sposta il TARGET di 45 gradi (angoli
+                    // sempre "puliti": 0, 45, 90, 135...); l'angolo vero e
+                    // proprio (run.mirrorAngles) lo raggiunge con un'animazione
+                    // fluida qui sotto, invece di scattare di colpo.
+                    if (IsKeyPressed(kb.rotateMirrorLeft)) run.targetMirrorAngles[nearestMirror] -= 45.0f;
+                    if (IsKeyPressed(kb.rotateMirrorRight)) run.targetMirrorAngles[nearestMirror] += 45.0f;
                 }
             }
 
-            // Animazione fluida dell'angolo dello specchio verso il target
+            // Animazione fluida dell'angolo di ogni specchio verso il target,
+            // prendendo sempre il verso piu' breve.
             for (size_t i = 0; i < run.mirrorAngles.size(); i++) {
                 float diff = run.targetMirrorAngles[i] - run.mirrorAngles[i];
                 while (diff > 180.0f) diff -= 360.0f;
                 while (diff < -180.0f) diff += 360.0f;
 
-                float mirrorAnimSpeed = 360.0f; // Velocità di rotazione (gradi al secondo)
+                const float mirrorAnimSpeed = 360.0f; // gradi al secondo
                 if (fabsf(diff) < 0.5f) {
                     run.mirrorAngles[i] = run.targetMirrorAngles[i];
                 } else {
@@ -324,7 +329,18 @@ int main() {
                 float overlapX = (crateSize.x / 2.0f + run.player.radius) - fabsf(dx);
                 float overlapZ = (crateSize.z / 2.0f + run.player.radius) - fabsf(dz);
 
-                if (overlapX > 0.0f && overlapZ > 0.0f) {
+                // Il push va applicato SOLO se il giocatore si sovrappone anche
+                // in verticale alla cassa: senza questo controllo, saltando
+                // sopra una cassa (es. scavalcando un muro) la si spingeva lo
+                // stesso solo perche' orizzontalmente vicina, anche a mezz'aria
+                // ben sopra di essa - causando spinte enormi e casse che
+                // finivano teletrasportate dentro/oltre i muri.
+                float crateMinY = cratePos.y - crateSize.y / 2.0f;
+                float crateMaxY = cratePos.y + crateSize.y / 2.0f;
+                bool verticalOverlap = (run.player.position.y + run.player.radius > crateMinY) &&
+                                       (run.player.position.y - run.player.radius < crateMaxY);
+
+                if (verticalOverlap && overlapX > 0.0f && overlapZ > 0.0f) {
                     if (overlapX < overlapZ) {
                         cratePos.x += (dx >= 0.0f) ? overlapX : -overlapX;
                     } else {
@@ -788,6 +804,8 @@ int main() {
                 { "Destra", &kb.moveRight },
                 { "Salta", &kb.jump },
                 { "Interagisci (interruttori)", &kb.interact },
+                { "Ruota specchio/emettitore (sinistra)", &kb.rotateMirrorLeft },
+                { "Ruota specchio/emettitore (destra)", &kb.rotateMirrorRight },
                 { "Ruota camera a sinistra", &kb.rotateLeft },
                 { "Ruota camera a destra", &kb.rotateRight },
                 { "Suggerimento", &kb.hint },

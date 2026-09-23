@@ -221,7 +221,7 @@ void LevelEditor::PickAt() {
     for (int i = 0; i < (int)working.doors.size(); i++) {
         const auto& d = working.doors[i];
         Vector3 eff = GetDoorEffectiveSize(d);
-        Vector3 c = { d.position.x, eff.y / 2.0f, d.position.z };
+        Vector3 c = { d.position.x, d.position.y + eff.y / 2.0f, d.position.z };
         considerBox(c, eff, EditorSelType::DOOR, i);
     }
     for (int i = 0; i < (int)working.pads.size(); i++)
@@ -235,6 +235,112 @@ void LevelEditor::PickAt() {
 
     if (bestType != EditorSelType::NONE) { selType = bestType; selIndex = bestIndex; return; }
     ClearSelection();
+}
+
+bool LevelEditor::GetSelectedPosition(Vector3& outPos) const {
+    switch (selType) {
+        case EditorSelType::SWITCH:
+            if (selIndex >= 0 && selIndex < (int)working.switches.size()) { outPos = working.switches[selIndex].position; return true; }
+            break;
+        case EditorSelType::EMITTER:
+            if (selIndex >= 0 && selIndex < (int)working.emitters.size()) { outPos = working.emitters[selIndex].position; return true; }
+            break;
+        case EditorSelType::RECEIVER:
+            if (selIndex >= 0 && selIndex < (int)working.receivers.size()) { outPos = working.receivers[selIndex].position; return true; }
+            break;
+        case EditorSelType::MIRROR:
+            if (selIndex >= 0 && selIndex < (int)working.mirrors.size()) { outPos = working.mirrors[selIndex].position; return true; }
+            break;
+        case EditorSelType::DOOR:
+            if (selIndex >= 0 && selIndex < (int)working.doors.size()) { outPos = working.doors[selIndex].position; return true; }
+            break;
+        case EditorSelType::PAD:
+            if (selIndex >= 0 && selIndex < (int)working.pads.size()) { outPos = working.pads[selIndex].position; return true; }
+            break;
+        case EditorSelType::DRAGGABLE:
+            if (selIndex >= 0 && selIndex < (int)working.draggables.size()) { outPos = working.draggables[selIndex].position; return true; }
+            break;
+        case EditorSelType::OBSTACLE:
+            if (selIndex >= 0 && selIndex < (int)working.obstacles.size()) { outPos = working.obstacles[selIndex].position; return true; }
+            break;
+        case EditorSelType::PLATFORM:
+            if (selIndex >= 0 && selIndex < (int)working.platforms.size()) { outPos = working.platforms[selIndex].position; return true; }
+            break;
+        case EditorSelType::START:
+            outPos = working.playerStart; return true;
+        case EditorSelType::EXIT:
+            outPos = working.exitPosition; return true;
+        default: break;
+    }
+    return false;
+}
+
+void LevelEditor::SetSelectedPosition(Vector3 pos) {
+    switch (selType) {
+        case EditorSelType::SWITCH:
+            if (selIndex >= 0 && selIndex < (int)working.switches.size()) working.switches[selIndex].position = pos;
+            break;
+        case EditorSelType::EMITTER:
+            if (selIndex >= 0 && selIndex < (int)working.emitters.size()) working.emitters[selIndex].position = pos;
+            break;
+        case EditorSelType::RECEIVER:
+            if (selIndex >= 0 && selIndex < (int)working.receivers.size()) working.receivers[selIndex].position = pos;
+            break;
+        case EditorSelType::MIRROR:
+            if (selIndex >= 0 && selIndex < (int)working.mirrors.size()) working.mirrors[selIndex].position = pos;
+            break;
+        case EditorSelType::DOOR:
+            if (selIndex >= 0 && selIndex < (int)working.doors.size()) working.doors[selIndex].position = pos;
+            break;
+        case EditorSelType::PAD:
+            if (selIndex >= 0 && selIndex < (int)working.pads.size()) working.pads[selIndex].position = pos;
+            break;
+        case EditorSelType::DRAGGABLE:
+            if (selIndex >= 0 && selIndex < (int)working.draggables.size()) working.draggables[selIndex].position = pos;
+            break;
+        case EditorSelType::OBSTACLE:
+            if (selIndex >= 0 && selIndex < (int)working.obstacles.size()) working.obstacles[selIndex].position = pos;
+            break;
+        case EditorSelType::PLATFORM:
+            if (selIndex >= 0 && selIndex < (int)working.platforms.size()) working.platforms[selIndex].position = pos;
+            break;
+        case EditorSelType::START:
+            working.playerStart = pos; break;
+        case EditorSelType::EXIT:
+            working.exitPosition = pos; break;
+        default: break;
+    }
+}
+
+float LevelEditor::ClosestTOnAxis(Ray ray, Vector3 axisOrigin, Vector3 axisDir) const {
+    // Punto piu' vicino tra due rette nello spazio (il raggio del mouse e la
+    // retta dell'asse): formula standard, axisDir e' assunto unitario.
+    Vector3 r = Vector3Subtract(ray.position, axisOrigin);
+    float a = Vector3DotProduct(ray.direction, ray.direction);
+    float b = Vector3DotProduct(ray.direction, axisDir);
+    float c = 1.0f; // axisDir unitario
+    float d = Vector3DotProduct(ray.direction, r);
+    float e = Vector3DotProduct(axisDir, r);
+    float denom = a * c - b * b;
+    if (fabsf(denom) < 1e-6f) return 0.0f; // raggio quasi parallelo all'asse: nessuna soluzione stabile
+    return (a * e - b * d) / denom;
+}
+
+void LevelEditor::DrawGizmo(Vector3 pos) {
+    struct Axis { Vector3 dir; Color color; };
+    Axis axes[3] = {
+        { Vector3{ 1, 0, 0 }, RED },
+        { Vector3{ 0, 1, 0 }, GREEN },
+        { Vector3{ 0, 0, 1 }, BLUE },
+    };
+    for (int i = 0; i < 3; i++) {
+        bool active = (gizmoDragAxis == i);
+        Color c = active ? YELLOW : axes[i].color;
+        Vector3 shaftEnd = Vector3Add(pos, Vector3Scale(axes[i].dir, kGizmoLength - 0.3f));
+        Vector3 tipEnd = Vector3Add(pos, Vector3Scale(axes[i].dir, kGizmoLength));
+        DrawCylinderEx(pos, shaftEnd, 0.035f, 0.035f, 8, c);
+        DrawCylinderEx(shaftEnd, tipEnd, 0.11f, 0.0f, 12, c);
+    }
 }
 
 void LevelEditor::DeleteSelected() {
@@ -323,7 +429,50 @@ void LevelEditor::Update() {
     mw.y = SnapToGrid(mw.y);
 
     if (tool == EditorTool::SELECT) {
-        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && inCanvas) {
+        // Gizmo: se c'e' gia' un oggetto selezionato, un click su una delle
+        // sue freccette lo trascina SOLO lungo quell'asse, invece di
+        // cambiare selezione o spostarlo liberamente sul piano orizzontale.
+        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && inCanvas && selType != EditorSelType::NONE && gizmoDragAxis == -1) {
+            Vector3 selPos;
+            if (GetSelectedPosition(selPos)) {
+                Ray ray = GetMouseRay(mouseScreen, camera);
+                Vector3 axisDirs[3] = { Vector3{ 1, 0, 0 }, Vector3{ 0, 1, 0 }, Vector3{ 0, 0, 1 } };
+                int hitAxis = -1;
+                float hitDist = 1e30f;
+                for (int i = 0; i < 3; i++) {
+                    Vector3 end = Vector3Add(selPos, Vector3Scale(axisDirs[i], kGizmoLength));
+                    const float half = 0.14f;
+                    BoundingBox box{
+                        Vector3{ std::min(selPos.x, end.x) - half, std::min(selPos.y, end.y) - half, std::min(selPos.z, end.z) - half },
+                        Vector3{ std::max(selPos.x, end.x) + half, std::max(selPos.y, end.y) + half, std::max(selPos.z, end.z) + half }
+                    };
+                    RayCollision hit = GetRayCollisionBox(ray, box);
+                    if (hit.hit && hit.distance < hitDist) { hitDist = hit.distance; hitAxis = i; }
+                }
+                if (hitAxis >= 0) {
+                    gizmoDragAxis = hitAxis;
+                    gizmoDragOrigPos = selPos;
+                    gizmoDragStartT = ClosestTOnAxis(ray, selPos, axisDirs[hitAxis]);
+                }
+            }
+        }
+
+        if (gizmoDragAxis >= 0) {
+            if (IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
+                Vector3 axisDirs[3] = { Vector3{ 1, 0, 0 }, Vector3{ 0, 1, 0 }, Vector3{ 0, 0, 1 } };
+                Vector3 axisDir = axisDirs[gizmoDragAxis];
+                Ray ray = GetMouseRay(mouseScreen, camera);
+                float t = ClosestTOnAxis(ray, gizmoDragOrigPos, axisDir);
+                float delta = t - gizmoDragStartT;
+                Vector3 newPos = Vector3Add(gizmoDragOrigPos, Vector3Scale(axisDir, delta));
+                if (gizmoDragAxis == 0) newPos.x = SnapToGrid(newPos.x);
+                else if (gizmoDragAxis == 2) newPos.z = SnapToGrid(newPos.z);
+                else if (gridSnap) newPos.y = roundf(newPos.y / gridSize) * gridSize;
+                SetSelectedPosition(newPos);
+            }
+            if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) gizmoDragAxis = -1;
+        }
+        else if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && inCanvas) {
             PickAt();
             if (selType != EditorSelType::NONE) {
                 isDraggingSel = true;
@@ -405,7 +554,7 @@ void LevelEditor::Update() {
             DeleteSelected();
         }
 
-        // Q / E: ruota di 45 gradi lo specchio o l'emettitore selezionato,
+        // Q / E: ruota di 15 gradi lo specchio o l'emettitore selezionato,
         // senza dover usare i bottoni +/- nella sidebar.
         if (!nameActive && !descActive && !switchNameActive) {
             float rotStep = 0.0f;
@@ -658,8 +807,8 @@ void LevelEditor::DrawSidebar() {
     DrawText("ANGOLO (specchi/emettitori)", (int)x, (int)y, 11, DARKGRAY); y += 15;
     {
         Rectangle m = { x, y, 28, 26 }, p = { x + w - 28, y, 28, 26 };
-        if (DrawMiniButton(m, "-", LIGHTGRAY, GRAY)) newAngleDeg = WrapAngle(newAngleDeg - 15.0f);
-        if (DrawMiniButton(p, "+", LIGHTGRAY, GRAY)) newAngleDeg = WrapAngle(newAngleDeg + 15.0f);
+        if (DrawMiniButton(m, "-", LIGHTGRAY, GRAY)) newAngleDeg = WrapAngle(newAngleDeg - 45.0f);
+        if (DrawMiniButton(p, "+", LIGHTGRAY, GRAY)) newAngleDeg = WrapAngle(newAngleDeg + 45.0f);
         std::string val = TextFormat("%.0f gradi", newAngleDeg);
         DrawText(val.c_str(), (int)(x + w / 2 - MeasureText(val.c_str(), 16) / 2), (int)y + 4, 16, BLACK);
         y += 32;
@@ -793,12 +942,32 @@ void LevelEditor::DrawSidebar() {
                   DrawText(s.c_str(), (int)(x + w / 2 - MeasureText(s.c_str(), 16) / 2), (int)y + 3, 16, BLACK);
                   y += 28; }
 
-                DrawText("Altezza:", (int)x, (int)y, 11, DARKGRAY); y += 14;
+                DrawText("Altezza (dimensione Y):", (int)x, (int)y, 11, DARKGRAY); y += 14;
+                { Rectangle m = { x, y, 28, 24 }, p = { x + w - 28, y, 28, 24 };
+                  // Ridimensiona size.y tenendo ferma la base (il "pavimento" su
+                  // cui l'oggetto appoggia), non il centro: altrimenti crescere
+                  // in altezza lo farebbe anche sprofondare a meta' nel
+                  // pavimento. Prima questo controllo non esisteva affatto: i
+                  // pulsanti "Altezza" spostavano solo la posizione, mai la
+                  // dimensione reale (size.y restava fissa per sempre).
+                  if (DrawMiniButton(m, "-", LIGHTGRAY, GRAY) && box.size.y > 0.5f) {
+                      box.size.y = std::max(0.5f, box.size.y - 0.5f);
+                      box.position.y -= 0.25f;
+                  }
+                  if (DrawMiniButton(p, "+", LIGHTGRAY, GRAY)) {
+                      box.size.y += 0.5f;
+                      box.position.y += 0.25f;
+                  }
+                  std::string s = TextFormat("%.1f", box.size.y);
+                  DrawText(s.c_str(), (int)(x + w / 2 - MeasureText(s.c_str(), 16) / 2), (int)y + 3, 16, BLACK);
+                  y += 28; }
+
+                DrawText("Quota (base):", (int)x, (int)y, 11, DARKGRAY); y += 14;
                 { Rectangle m = { x, y, 28, 24 }, p = { x + w - 28, y, 28, 24 };
                   if (DrawMiniButton(m, "-", LIGHTGRAY, GRAY)) box.position.y -= 0.5f;
                   if (DrawMiniButton(p, "+", LIGHTGRAY, GRAY)) box.position.y += 0.5f;
-                  float topY = box.position.y + box.size.y / 2.0f;
-                  std::string s = TextFormat("%.1f", topY);
+                  float baseY = box.position.y - box.size.y / 2.0f;
+                  std::string s = TextFormat("%.1f", baseY);
                   DrawText(s.c_str(), (int)(x + w / 2 - MeasureText(s.c_str(), 16) / 2), (int)y + 3, 16, BLACK);
                   y += 28; }
 
@@ -913,8 +1082,8 @@ void LevelEditor::DrawSidebar() {
             LevelMirror& mir = working.mirrors[selIndex];
             DrawText("Angolo pannello:", (int)x, (int)y, 11, DARKGRAY); y += 14;
             { Rectangle m = { x, y, 28, 24 }, p = { x + w - 28, y, 28, 24 };
-              if (DrawMiniButton(m, "-", LIGHTGRAY, GRAY)) mir.angleDeg = WrapAngle(mir.angleDeg - 15.0f);
-              if (DrawMiniButton(p, "+", LIGHTGRAY, GRAY)) mir.angleDeg = WrapAngle(mir.angleDeg + 15.0f);
+              if (DrawMiniButton(m, "-", LIGHTGRAY, GRAY)) mir.angleDeg = WrapAngle(mir.angleDeg - 45.0f);
+              if (DrawMiniButton(p, "+", LIGHTGRAY, GRAY)) mir.angleDeg = WrapAngle(mir.angleDeg + 45.0f);
               std::string s = TextFormat("%.0f gradi", mir.angleDeg);
               DrawText(s.c_str(), (int)(x + w / 2 - MeasureText(s.c_str(), 15) / 2), (int)y + 4, 15, BLACK);
               y += 28; }
@@ -951,8 +1120,8 @@ void LevelEditor::DrawSidebar() {
             LevelEmitter& em = working.emitters[selIndex];
             DrawText("Direzione del raggio:", (int)x, (int)y, 11, DARKGRAY); y += 14;
             { Rectangle m = { x, y, 28, 24 }, p = { x + w - 28, y, 28, 24 };
-              if (DrawMiniButton(m, "-", LIGHTGRAY, GRAY)) em.angleDeg = WrapAngle(em.angleDeg - 15.0f);
-              if (DrawMiniButton(p, "+", LIGHTGRAY, GRAY)) em.angleDeg = WrapAngle(em.angleDeg + 15.0f);
+              if (DrawMiniButton(m, "-", LIGHTGRAY, GRAY)) em.angleDeg = WrapAngle(em.angleDeg - 45.0f);
+              if (DrawMiniButton(p, "+", LIGHTGRAY, GRAY)) em.angleDeg = WrapAngle(em.angleDeg + 45.0f);
               std::string s = TextFormat("%.0f gradi", em.angleDeg);
               DrawText(s.c_str(), (int)(x + w / 2 - MeasureText(s.c_str(), 15) / 2), (int)y + 4, 15, BLACK);
               y += 28; }
@@ -1065,7 +1234,7 @@ void LevelEditor::DrawSidebar() {
     }
 
     DrawText("Sinistro: crea/sposta.  Destro: ruota vista.", (int)x, 656, 10, GRAY);
-    DrawText("Centrale: sposta vista.  Rotella: zoom.", (int)x, 670, 10, GRAY);
+    DrawText("Freccette: trascina lungo un asse solo.  Rotella: zoom.", (int)x, 670, 10, GRAY);
     DrawText("CANC: elimina.  Q/E: ruota specchio/emettitore.  Griglia: sopra.", (int)x, 684, 10, GRAY);
 }
 
@@ -1123,7 +1292,7 @@ void LevelEditor::DrawCanvas() {
                 if (selIndex >= 0 && selIndex < (int)working.doors.size()) {
                     auto& d = working.doors[selIndex];
                     Vector3 eff = GetDoorEffectiveSize(d);
-                    Vector3 c = { d.position.x, eff.y / 2.0f, d.position.z };
+                    Vector3 c = { d.position.x, d.position.y + eff.y / 2.0f, d.position.z };
                     DrawCubeWires(c, eff.x + 0.1f, eff.y + 0.1f, eff.z + 0.1f, GOLD);
                 }
                 break;
@@ -1152,6 +1321,13 @@ void LevelEditor::DrawCanvas() {
                 DrawCircle3D(working.exitPosition, working.exitRadius + 0.15f, Vector3{ 1, 0, 0 }, 90.0f, GOLD);
                 break;
             default: break;
+        }
+
+        // Gizmo di traslazione (freccette X/Y/Z) sull'oggetto selezionato,
+        // solo con lo strumento Seleziona attivo.
+        if (tool == EditorTool::SELECT && selType != EditorSelType::NONE) {
+            Vector3 selPos;
+            if (GetSelectedPosition(selPos)) DrawGizmo(selPos);
         }
 
         // Anteprima del box mentre si trascina per crearne uno nuovo

@@ -81,7 +81,12 @@ void DrawLevelScene(const LevelData& level, const SceneRenderState& state, const
         float h = (i < state.doorHeights.size()) ? state.doorHeights[i] : 0.0f;
         if (h <= 0.01f) continue;
         Vector3 effSize = GetDoorEffectiveSize(door);
-        Vector3 dp = { door.position.x, h / 2.0f, door.position.z };
+        // door.position.y e' la base (il "pavimento") della porta: la parte
+        // ancora visibile (che si ritira verso il basso mentre apre) parte da
+        // li' e si estende in alto di h. Prima si ignorava sempre
+        // door.position.y e si partiva da 0: spostare la porta in quota con
+        // il gizmo non aveva alcun effetto visibile.
+        Vector3 dp = { door.position.x, door.position.y + h / 2.0f, door.position.z };
         DrawCube(dp, effSize.x, h, effSize.z, door.color);
         DrawCubeWires(dp, effSize.x, h, effSize.z, BLACK);
     }

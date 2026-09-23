@@ -1,0 +1,260 @@
+{
+  "description": "Spingi la cassa rossa oltre il bordo della piattaforma sopraelevata: cadendo atterrera' sulla pedana sottostante e apri la porta.",
+  "doors": [
+    {
+      "color": "darkbrown",
+      "linked_switch": -1,
+      "linked_switches": [],
+      "logic_op": "OR",
+      "position": [
+        0.0,
+        0.0,
+        -0.5
+      ],
+      "rotated": false,
+      "size": [
+        2.5,
+        3.0,
+        0.5
+      ]
+    }
+  ],
+  "draggables": [
+    {
+      "color": "red",
+      "position": [
+        -4.0,
+        5.5,
+        4.0
+      ],
+      "size": [
+        2.0,
+        2.0,
+        2.0
+      ]
+    }
+  ],
+  "emitters": [],
+  "exit": {
+    "position": [
+      0.0,
+      0.0,
+      -2.5
+    ],
+    "radius": 1.5
+  },
+  "fall_reset_y": -8.0,
+  "gravity": true,
+  "mirrors": [],
+  "name": "level6_falling_box",
+  "obstacles": [
+    {
+      "color": "red",
+      "position": [
+        -1.25,
+        1.5,
+        4.0
+      ],
+      "size": [
+        0.5,
+        3.0,
+        8.0
+      ]
+    }
+  ],
+  "pads": [
+    {
+      "color": "red",
+      "linked_door": 0,
+      "position": [
+        -2.0,
+        0.05000000074505806,
+        4.0
+      ],
+      "size": [
+        1.5,
+        0.10000000149011612,
+        1.5
+      ]
+    }
+  ],
+  "platforms": [
+    {
+      "color": "lightgray",
+      "position": [
+        0.0,
+        -0.25,
+        7.0
+      ],
+      "size": [
+        2.0,
+        0.5,
+        2.0
+      ]
+    },
+    {
+      "color": "lightgray",
+      "position": [
+        -2.0,
+        -0.25,
+        4.0
+      ],
+      "size": [
+        2.0,
+        0.5,
+        2.0
+      ]
+    },
+    {
+      "color": "lightgray",
+      "position": [
+        2.0,
+        -0.25,
+        4.0
+      ],
+      "size": [
+        2.0,
+        0.5,
+        2.0
+      ]
+    },
+    {
+      "color": "lightgray",
+      "position": [
+        -0.5,
+        -0.25,
+        0.5
+      ],
+      "size": [
+        1.0,
+        0.5,
+        1.0
+      ]
+    },
+    {
+      "color": "lightgray",
+      "position": [
+        0.5,
+        -0.25,
+        1.5
+      ],
+      "size": [
+        1.0,
+        0.5,
+        1.0
+      ]
+    },
+    {
+      "color": "gray",
+      "position": [
+        -0.5,
+        -0.25,
+        1.5
+      ],
+      "size": [
+        1.0,
+        0.5,
+        1.0
+      ]
+    },
+    {
+      "color": "gray",
+      "position": [
+        0.5,
+        -0.25,
+        0.5
+      ],
+      "size": [
+        1.0,
+        0.5,
+        1.0
+      ]
+    },
+    {
+      "color": "gray",
+      "position": [
+        -5.5,
+        4.25,
+        4.0
+      ],
+      "size": [
+        5.0,
+        0.5,
+        2.0
+      ]
+    },
+    {
+      "color": "lightgray",
+      "position": [
+        4.5,
+        0.75,
+        4.0
+      ],
+      "size": [
+        2.0,
+        0.5,
+        2.0
+      ]
+    },
+    {
+      "color": "lightgray",
+      "position": [
+        4.0,
+        1.25,
+        7.5
+      ],
+      "size": [
+        2.0,
+        0.5,
+        2.0
+      ]
+    },
+    {
+      "color": "lightgray",
+      "position": [
+        2.0,
+        1.75,
+        11.0
+      ],
+      "size": [
+        3.0,
+        0.5,
+        3.5
+      ]
+    },
+    {
+      "color": "lightgray",
+      "position": [
+        -4.5,
+        2.25,
+        11.5
+      ],
+      "size": [
+        6.5,
+        0.5,
+        2.5
+      ]
+    },
+    {
+      "color": "lightgray",
+      "position": [
+        -7.5,
+        3.25,
+        7.5
+      ],
+      "size": [
+        2.5,
+        0.5,
+        2.5
+      ]
+    }
+  ],
+  "player_start": [
+    0.0,
+    1.0,
+    7.0
+  ],
+  "random_sequence": true,
+  "receivers": [],
+  "switches": []
+}

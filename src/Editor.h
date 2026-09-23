@@ -101,6 +101,28 @@ private:
     // (es. il bordo superiore di una porta) invece che solo vicino a terra.
     void PickAt();
 
+    // Gizmo di traslazione (le "freccette" stile Blender) per l'oggetto
+    // selezionato: una per asse (X rosso, Y verde, Z blu). Trascinandone una
+    // l'oggetto si sposta SOLO lungo quell'asse, invece che liberamente sul
+    // piano orizzontale come col trascinamento diretto.
+    int gizmoDragAxis = -1;          // -1 = nessuno, 0 = X, 1 = Y, 2 = Z
+    Vector3 gizmoDragOrigPos{ 0, 0, 0 };
+    float gizmoDragStartT = 0.0f;
+    static constexpr float kGizmoLength = 1.4f;
+
+    // Legge/scrive la posizione dell'oggetto attualmente selezionato,
+    // qualunque sia il suo tipo (switch, specchio, porta, piattaforma...):
+    // centralizza l'accesso ai vari campi "position" cosi' il gizmo (e in
+    // futuro altri strumenti) non devono conoscere ogni tipo singolarmente.
+    bool GetSelectedPosition(Vector3& outPos) const;
+    void SetSelectedPosition(Vector3 pos);
+
+    // Punto sull'asse (origine + t*dir) piu' vicino al raggio del mouse:
+    // tecnica standard per il trascinamento vincolato a un singolo asse.
+    float ClosestTOnAxis(Ray ray, Vector3 axisOrigin, Vector3 axisDir) const;
+
+    void DrawGizmo(Vector3 pos);
+
     void DrawTopBar();
     void DrawSidebar();
     void DrawCanvas();
