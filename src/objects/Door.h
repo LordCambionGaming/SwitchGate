@@ -18,6 +18,7 @@ struct LevelDoor {
     std::vector<int> linkedSwitches;       // Lista di interruttori collegati
     std::string logicOp = "OR";            // Operatore logico: "OR" oppure "AND"
     bool rotated = false;
+    int subworld = -1;                     // -1 = condivisa tra tutti i sub-mondi
 };
 
 // Dimensioni della porta come vanno effettivamente usate per disegno e

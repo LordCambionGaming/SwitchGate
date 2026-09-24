@@ -30,6 +30,11 @@ struct SceneRenderState {
     bool showPlayer = false;
     Vector3 playerPosition{ 0, 0, 0 };
     float playerRadius = 0.5f;
+
+    // Sub-mondo da disegnare: -1 = mostra tutto (usato dall'editor in
+    // modalita' "Tutti i mondi"), 0-3 = mostra solo gli oggetti con quel
+    // subworld piu' quelli condivisi (subworld == -1 sull'oggetto stesso).
+    int subworld = -1;
 };
 
 // Stato "neutro" per mostrare un livello senza una partita in corso (usato

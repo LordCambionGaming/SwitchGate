@@ -11,6 +11,7 @@ std::vector<LevelPad> ParsePadsField(const json& root) {
         if (p.contains("size")) pad.size = ParseVec3(p["size"], pad.size);
         if (p.contains("color")) pad.color = ParseColor(p["color"], pad.color);
         if (p.contains("linked_door")) pad.linkedDoor = p["linked_door"].get<int>();
+        if (p.contains("subworld")) pad.subworld = p["subworld"].get<int>();
         out.push_back(pad);
     }
     return out;
@@ -23,7 +24,8 @@ json PadsToJson(const std::vector<LevelPad>& pads) {
             { "position", Vec3ToJson(p.position) },
             { "size", Vec3ToJson(p.size) },
             { "color", ColorToJson(p.color) },
-            { "linked_door", p.linkedDoor }
+            { "linked_door", p.linkedDoor },
+            { "subworld", p.subworld }
         });
     }
     return arr;

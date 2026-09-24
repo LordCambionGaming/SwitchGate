@@ -32,7 +32,12 @@ Vector3 DirFromAngleDeg(float angleDeg);
 // un muro. Riempie 'receiverLit' (un bool per ogni ricevitore: true se in
 // quel momento e' illuminato da un raggio del colore giusto) e ritorna i
 // segmenti da disegnare.
+// 'subworld' e' il sub-mondo attualmente attivo (vedi RunState::currentSubworld
+// in main.cpp): emettitori, specchi, ricevitori, ostacoli, porte e casse con
+// un subworld specifico diverso da quello corrente vengono ignorati, come se
+// non esistessero in questo momento.
 std::vector<LightBeamSegment> ComputeLightBeams(const LevelData& level,
                                                  const std::vector<float>& doorHeights,
                                                  const std::vector<Vector3>& draggablePositions,
+                                                 int subworld,
                                                  std::vector<bool>& receiverLit);

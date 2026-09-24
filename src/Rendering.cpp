@@ -1,6 +1,13 @@
 #include "Rendering.h"
 #include "raymath.h"
 
+// Vero se l'oggetto va disegnato/e' tangibile nel sub-mondo attualmente
+// mostrato: objSubworld -1 = oggetto condiviso (sempre presente), stateSubworld
+// -1 = si sta mostrando "tutto" (modalita' editor), altrimenti devono combaciare.
+static bool InActiveSubworld(int objSubworld, int stateSubworld) {
+    return stateSubworld == -1 || objSubworld == -1 || objSubworld == stateSubworld;
+}
+
 bool IsVisibleToCamera(const Camera3D& camera, Vector3 objPos, float objRadius) {
     Vector3 toObj = Vector3Subtract(objPos, camera.position);
     float dist = Vector3Length(toObj);
@@ -34,18 +41,21 @@ SceneRenderState MakeIdleSceneState(const LevelData& level) {
 
 void DrawLevelScene(const LevelData& level, const SceneRenderState& state, const Camera3D& camera, const Model* crateModel) {
     for (const auto& p : level.platforms) {
+        if (!InActiveSubworld(p.subworld, state.subworld)) continue;
         float radius = Vector3Length(Vector3Scale(p.size, 0.5f));
         if (!IsVisibleToCamera(camera, p.position, radius)) continue;
         DrawCube(p.position, p.size.x, p.size.y, p.size.z, p.color);
         DrawCubeWires(p.position, p.size.x, p.size.y, p.size.z, Fade(BLACK, 0.25f));
     }
     for (const auto& o : level.obstacles) {
+        if (!InActiveSubworld(o.subworld, state.subworld)) continue;
         float radius = Vector3Length(Vector3Scale(o.size, 0.5f));
         if (!IsVisibleToCamera(camera, o.position, radius)) continue;
         DrawCube(o.position, o.size.x, o.size.y, o.size.z, o.color);
         DrawCubeWires(o.position, o.size.x, o.size.y, o.size.z, DARKGRAY);
     }
     for (size_t i = 0; i < level.draggables.size(); i++) {
+        if (!InActiveSubworld(level.draggables[i].subworld, state.subworld)) continue;
         Vector3 dp = (i < state.draggablePositions.size()) ? state.draggablePositions[i] : level.draggables[i].position;
         Vector3 ds = level.draggables[i].size;
         float radius = Vector3Length(Vector3Scale(ds, 0.5f));
@@ -60,6 +70,7 @@ void DrawLevelScene(const LevelData& level, const SceneRenderState& state, const
 
     for (size_t i = 0; i < level.pads.size(); i++) {
         const LevelPad& pad = level.pads[i];
+        if (!InActiveSubworld(pad.subworld, state.subworld)) continue;
         if (!IsVisibleToCamera(camera, pad.position, pad.size.x)) continue;
         bool pressed = (i < state.padPressed.size()) && state.padPressed[i];
         Color c = pressed ? pad.color : Fade(pad.color, 0.45f);
@@ -69,6 +80,7 @@ void DrawLevelScene(const LevelData& level, const SceneRenderState& state, const
 
     for (size_t i = 0; i < level.switches.size(); i++) {
         const auto& s = level.switches[i];
+        if (!InActiveSubworld(s.subworld, state.subworld)) continue;
         if (!IsVisibleToCamera(camera, s.position, 0.87f)) continue;
         bool activated = (i < state.switchActivated.size()) && state.switchActivated[i];
         Color c = activated ? s.color : Fade(s.color, 0.4f);
@@ -78,6 +90,7 @@ void DrawLevelScene(const LevelData& level, const SceneRenderState& state, const
 
     for (size_t i = 0; i < level.doors.size(); i++) {
         const auto& door = level.doors[i];
+        if (!InActiveSubworld(door.subworld, state.subworld)) continue;
         float h = (i < state.doorHeights.size()) ? state.doorHeights[i] : 0.0f;
         if (h <= 0.01f) continue;
         Vector3 effSize = GetDoorEffectiveSize(door);
@@ -92,6 +105,7 @@ void DrawLevelScene(const LevelData& level, const SceneRenderState& state, const
     }
 
     for (const auto& mir : level.mirrors) {
+        if (!InActiveSubworld(mir.subworld, state.subworld)) continue;
         if (!IsVisibleToCamera(camera, mir.position, mir.length)) continue;
         Vector3 mDir = DirFromAngleDeg(mir.angleDeg);
         // Pannello sottile orientato lungo mDir: DrawCubeV non supporta la
@@ -111,6 +125,7 @@ void DrawLevelScene(const LevelData& level, const SceneRenderState& state, const
     }
 
     for (const auto& em : level.emitters) {
+        if (!InActiveSubworld(em.subworld, state.subworld)) continue;
         if (!IsVisibleToCamera(camera, em.position, 0.5f)) continue;
         DrawSphere(em.position, 0.25f, em.color);
         DrawSphereWires(em.position, 0.25f, 6, 6, BLACK);
@@ -118,6 +133,7 @@ void DrawLevelScene(const LevelData& level, const SceneRenderState& state, const
 
     for (size_t i = 0; i < level.receivers.size(); i++) {
         const auto& rec = level.receivers[i];
+        if (!InActiveSubworld(rec.subworld, state.subworld)) continue;
         if (!IsVisibleToCamera(camera, rec.position, rec.radius + 0.3f)) continue;
         bool lit = (i < state.receiverLit.size()) && state.receiverLit[i];
         Color c = lit ? rec.color : Fade(rec.color, 0.35f);

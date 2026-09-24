@@ -10,6 +10,7 @@ std::vector<LevelEmitter> ParseEmittersField(const json& root) {
         if (e.contains("position")) em.position = ParseVec3(e["position"], em.position);
         if (e.contains("angle")) em.angleDeg = e["angle"].get<float>();
         if (e.contains("color")) em.color = ParseColor(e["color"], em.color);
+        if (e.contains("subworld")) em.subworld = e["subworld"].get<int>();
         out.push_back(em);
     }
     return out;
@@ -21,7 +22,8 @@ json EmittersToJson(const std::vector<LevelEmitter>& emitters) {
         arr.push_back({
             { "position", Vec3ToJson(e.position) },
             { "angle", e.angleDeg },
-            { "color", ColorToJson(e.color) }
+            { "color", ColorToJson(e.color) },
+            { "subworld", e.subworld }
         });
     }
     return arr;

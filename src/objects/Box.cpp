@@ -10,6 +10,7 @@ std::vector<LevelBox> ParseBoxArray(const json& arr) {
         if (item.contains("position")) box.position = ParseVec3(item["position"], box.position);
         if (item.contains("size")) box.size = ParseVec3(item["size"], box.size);
         if (item.contains("color")) box.color = ParseColor(item["color"], box.color);
+        if (item.contains("subworld")) box.subworld = item["subworld"].get<int>();
         out.push_back(box);
     }
     return out;
@@ -21,7 +22,8 @@ json BoxArrayToJson(const std::vector<LevelBox>& boxes) {
         arr.push_back({
             { "position", Vec3ToJson(b.position) },
             { "size", Vec3ToJson(b.size) },
-            { "color", ColorToJson(b.color) }
+            { "color", ColorToJson(b.color) },
+            { "subworld", b.subworld }
         });
     }
     return arr;

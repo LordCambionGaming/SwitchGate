@@ -39,6 +39,15 @@ private:
     int colorIndex = 0;
     float sidebarScroll = 0.0f;
 
+    // Sub-mondo che si sta visualizzando/costruendo in questo momento:
+    // -1 = "Tutti i mondi" (si vede e si modifica tutto, com'era prima),
+    // 0-3 = si vedono solo gli oggetti di quel mondo piu' quelli condivisi
+    // (subworld -1 sull'oggetto). I nuovi oggetti creati ereditano questo
+    // valore, cosi' costruire un mondo alla volta e' naturale.
+    int activeSubworld = -1;
+    bool GetSelectedSubworld(int& outSw) const;
+    void SetSelectedSubworld(int sw);
+
     // Snap a griglia: arrotonda le coordinate X/Z (piazzamento e trascinamento)
     // al multiplo piu' vicino di gridSize, per rendere facile allineare gli
     // oggetti e costruire livelli simmetrici invece di piazzare tutto a mano libera.

@@ -19,6 +19,7 @@ std::vector<LevelDoor> ParseDoorsField(const json& root) {
             }
             if (d.contains("logic_op")) door.logicOp = d["logic_op"].get<std::string>();
             if (d.contains("rotated")) door.rotated = d["rotated"].get<bool>();
+            if (d.contains("subworld")) door.subworld = d["subworld"].get<int>();
             out.push_back(door);
         }
     } else if (root.contains("door")) {
@@ -44,7 +45,8 @@ json DoorsToJson(const std::vector<LevelDoor>& doors) {
             { "linked_switch", d.linkedSwitch },
             { "linked_switches", d.linkedSwitches },
             { "logic_op", d.logicOp },
-            { "rotated", d.rotated }
+            { "rotated", d.rotated },
+            { "subworld", d.subworld }
         });
     }
     return arr;

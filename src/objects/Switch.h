@@ -11,6 +11,7 @@ struct LevelSwitch {
     Vector3 position{ 0, 0.5f, 0 };
     Color color = RED;
     std::string name = "?";
+    int subworld = -1;                     // -1 = condiviso tra tutti i sub-mondi
 };
 
 // Legge l'array "switches" dal JSON radice del livello (se presente).

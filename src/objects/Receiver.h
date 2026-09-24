@@ -14,6 +14,7 @@ struct LevelReceiver {
     float radius = 0.4f;
     Color color = RED;
     int linkedDoor = -1;
+    int subworld = -1;                     // -1 = condiviso tra tutti i sub-mondi
 };
 
 std::vector<LevelReceiver> ParseReceiversField(const nlohmann::json& root);

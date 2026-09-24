@@ -14,6 +14,7 @@ struct LevelEmitter {
     Vector3 position{ 0, 1.0f, 0 };
     float angleDeg = 0.0f;
     Color color = RED;
+    int subworld = -1;                     // -1 = condiviso tra tutti i sub-mondi
 };
 
 std::vector<LevelEmitter> ParseEmittersField(const nlohmann::json& root);

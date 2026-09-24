@@ -16,6 +16,7 @@ struct LevelMirror {
     float length = 2.0f;
     float height = 2.0f;
     Color color = SKYBLUE;
+    int subworld = -1;                     // -1 = condiviso tra tutti i sub-mondi
 };
 
 std::vector<LevelMirror> ParseMirrorsField(const nlohmann::json& root);

@@ -13,6 +13,9 @@ struct LevelBox {
     Vector3 position{ 0, 0, 0 };
     Vector3 size{ 1, 1, 1 };
     Color color = LIGHTGRAY;
+    // -1 = visibile/solido in ogni sub-mondo ("condiviso"); 0-3 = attivo solo
+    // quando quel sub-mondo e' quello corrente (vedi RunState::currentSubworld).
+    int subworld = -1;
 };
 
 // Legge un array di box (non e' legato a una chiave fissa: platforms,

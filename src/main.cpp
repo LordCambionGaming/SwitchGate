@@ -16,10 +16,19 @@
 #include <cctype>
 
 #if defined(_WIN32) && defined(NDEBUG)
+// Nelle build Release su Windows, nasconde la finestra della console nera
+// che altrimenti si apre insieme alla finestra di gioco.
 #pragma comment(linker, "/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup")
 #endif
 
+// Stato globale dell'applicazione
+
+
 enum class GameState { MENU, LEVEL_SELECT, PLAYING, HELP, SETTINGS, EDITOR };
+
+
+// Stato di una partita in corso (indipendente dal livello, si resetta a ogni R)
+
 
 struct RunState {
     std::vector<bool> activated;
@@ -38,16 +47,32 @@ struct RunState {
     float cameraYaw = 0.0f;
     float targetCameraYaw = 0.0f;
 
+    // Sub-mondo "attivo" in questo momento: 0-3, uno per ognuna delle 4
+    // direzioni fisse della camera (che scatta sempre a multipli di 90
+    // gradi). Ricalcolato ogni frame da targetCameraYaw (si aggiorna
+    // nell'istante in cui il giocatore decide di girarsi, non solo a fine
+    // animazione): gli oggetti di un altro sub-mondo diventano invisibili E
+    // intangibili, quelli con subworld = -1 restano sempre presenti.
+    int currentSubworld = 0;
+
     std::vector<Vector3> draggablePos;
     std::vector<Vector3> draggableVel;
     std::vector<bool> padPressed;
     std::vector<bool> receiverLit;
     std::vector<LightBeamSegment> beams;
 
+    // Angolo ATTUALE di ogni specchio durante la partita: il giocatore puo'
+    // ruotarli con Q/E per indirizzare il laser (vedi sotto). Parte sempre
+    // dall'angolo configurato nel livello (currentLevel.mirrors non viene
+    // mai modificato), cosi' "Ricomincia livello" li riporta all'originale.
     std::vector<float> mirrorAngles;
     std::vector<float> targetMirrorAngles;
 };
 
+// Copia level applicando gli angoli specchio CORRENTI della partita
+// (run.mirrorAngles, che il giocatore puo' cambiare con Q/E) al posto di
+// quelli statici salvati nel livello. Usata per il calcolo dei raggi di luce
+// e per il disegno durante il gioco, senza mai toccare currentLevel.mirrors.
 static LevelData ApplyMirrorAngles(const LevelData& level, const std::vector<float>& mirrorAngles) {
     LevelData out = level;
     for (size_t i = 0; i < out.mirrors.size() && i < mirrorAngles.size(); i++) {
@@ -68,12 +93,7 @@ static void StartRun(RunState& run, const LevelData& level, std::mt19937& rng) {
     }
 
     run.currentStep = 0;
-
-    // Se non ci sono interruttori ED non ci sono porte/pedane/ricevitori, il livello parte risolto.
-    // Se ci sono porte/pedane/ricevitori, la risoluzione dipende dal completamento delle porte.
-    bool hasDoorsOrInputs = !level.doors.empty() || !level.pads.empty() || !level.receivers.empty();
-    run.solved = level.switches.empty() && !hasDoorsOrInputs;
-
+    run.solved = level.switches.empty();
     run.won = false;
     run.doorHeights.resize(level.doors.size());
     for (size_t i = 0; i < level.doors.size(); i++) run.doorHeights[i] = level.doors[i].size.y;
@@ -88,6 +108,7 @@ static void StartRun(RunState& run, const LevelData& level, std::mt19937& rng) {
     run.isNewRecord = false;
     run.cameraYaw = 0.0f;
     run.targetCameraYaw = 0.0f;
+    run.currentSubworld = 0;
     run.draggablePos.clear();
     run.draggableVel.assign(level.draggables.size(), Vector3{ 0, 0, 0 });
     for (const auto& d : level.draggables) run.draggablePos.push_back(d.position);
@@ -102,6 +123,9 @@ static void StartRun(RunState& run, const LevelData& level, std::mt19937& rng) {
     run.player.onGround = false;
 }
 
+// Genera una texture procedurale in stile "cassa di legno" (assi orizzontali
+// e rinforzi incrociati), su base quasi neutra cosi' che il tint per-cassa
+// (il colore scelto nell'editor) resti ben leggibile sopra il disegno.
 static std::string ColorToDisplayName(Color c) {
     struct Named { const char* name; Color color; };
     static const Named table[] = {
@@ -180,7 +204,6 @@ int main() {
     int rebindingIndex = -1;
     float settingsScroll = 0.0f;
     float helpScroll = 0.0f;
-    float levelSelectScroll = 0.0f;
 
     LevelManager levelManager;
     levelManager.ScanDirectory("levels");
@@ -205,6 +228,9 @@ int main() {
 
         if (IsKeyPressed(kb.toggleMusic)) musicMuted = !musicMuted;
 
+   
+        // Aggiornamento logico per stato
+    
         if (state == GameState::EDITOR) {
             editor.Update();
         }
@@ -224,6 +250,8 @@ int main() {
                 }
             }
 
+            // Anima la camera verso l'angolo scelto (multiplo di 90 gradi),
+            // prendendo sempre il verso piu' breve.
             {
                 float diff = run.targetCameraYaw - run.cameraYaw;
                 while (diff > PI) diff -= 2.0f * PI;
@@ -231,6 +259,19 @@ int main() {
                 float rotSpeed = 5.0f * kb.mouseSensitivity;
                 if (fabsf(diff) < 0.02f) run.cameraYaw = run.targetCameraYaw;
                 else run.cameraYaw += Clamp(diff, -rotSpeed * dt, rotSpeed * dt);
+            }
+
+            // "Avanti" e "destra" sono relativi a dove guarda la camera, non
+            // agli assi fissi del mondo: cosi' WASD si comporta in modo
+            // naturale in ognuna delle 4 direzioni scelte.
+            // Il sub-mondo cambia nell'istante in cui il giocatore decide di
+            // girare la camera (targetCameraYaw), non solo quando l'animazione
+            // dello scatto finisce: cosi' oggetti/collisioni del nuovo mondo
+            // sono gia' coerenti mentre la camera sta ancora ruotando verso di
+            // esso, invece di restare "vecchi" per una frazione di secondo.
+            {
+                int q = (int)lroundf(run.targetCameraYaw / (PI / 2.0f));
+                run.currentSubworld = ((q % 4) + 4) % 4;
             }
 
             Vector3 camForward = { sinf(run.cameraYaw), 0, -cosf(run.cameraYaw) };
@@ -242,8 +283,14 @@ int main() {
             if (IsKeyDown(kb.moveRight)) move = Vector3Add(move, camRight);
             bool jumpPressed = IsKeyPressed(kb.jump);
 
-            UpdatePlayerPhysics(run.player, currentLevel, run.doorHeights, move, dt, jumpPressed);
+            UpdatePlayerPhysics(run.player, currentLevel, run.doorHeights, move, dt, jumpPressed, run.currentSubworld);
 
+            // Il giocatore puo' ruotare lo specchio piu' vicino (se abbastanza
+            // vicino) con Q (senso antiorario) / E (senso orario), per
+            // indirizzare il laser verso il ricevitore giusto. Si ruota
+            // run.mirrorAngles, MAI currentLevel.mirrors: cosi' "Ricomincia
+            // livello" (StartRun) riporta sempre gli specchi all'angolo
+            // originale del livello.
             if (!currentLevel.mirrors.empty()) {
                 const float mirrorInteractRange = 3.0f;
                 int nearestMirror = -1;
@@ -255,17 +302,23 @@ int main() {
                     if (d2 < nearestDistSq) { nearestDistSq = d2; nearestMirror = (int)i; }
                 }
                 if (nearestMirror >= 0) {
+                    // Ogni pressione sposta il TARGET di 45 gradi (angoli
+                    // sempre "puliti": 0, 45, 90, 135...); l'angolo vero e
+                    // proprio (run.mirrorAngles) lo raggiunge con un'animazione
+                    // fluida qui sotto, invece di scattare di colpo.
                     if (IsKeyPressed(kb.rotateMirrorLeft)) run.targetMirrorAngles[nearestMirror] -= 45.0f;
                     if (IsKeyPressed(kb.rotateMirrorRight)) run.targetMirrorAngles[nearestMirror] += 45.0f;
                 }
             }
 
+            // Animazione fluida dell'angolo di ogni specchio verso il target,
+            // prendendo sempre il verso piu' breve.
             for (size_t i = 0; i < run.mirrorAngles.size(); i++) {
                 float diff = run.targetMirrorAngles[i] - run.mirrorAngles[i];
                 while (diff > 180.0f) diff -= 360.0f;
                 while (diff < -180.0f) diff += 360.0f;
 
-                const float mirrorAnimSpeed = 360.0f;
+                const float mirrorAnimSpeed = 360.0f; // gradi al secondo
                 if (fabsf(diff) < 0.5f) {
                     run.mirrorAngles[i] = run.targetMirrorAngles[i];
                 } else {
@@ -284,6 +337,9 @@ int main() {
                 run.player.position.z + cameraDistance * cosf(run.cameraYaw)
             };
 
+            // Il giocatore spinge le casse camminandoci contro: si spostano
+            // solo lungo l'asse (X o Z) su cui la sovrapposizione e' minore,
+            // cosi' il movimento resta sempre allineato a una delle 4 direzioni.
             for (size_t i = 0; i < run.draggablePos.size(); i++) {
                 Vector3& cratePos = run.draggablePos[i];
                 Vector3 crateSize = currentLevel.draggables[i].size;
@@ -292,6 +348,12 @@ int main() {
                 float overlapX = (crateSize.x / 2.0f + run.player.radius) - fabsf(dx);
                 float overlapZ = (crateSize.z / 2.0f + run.player.radius) - fabsf(dz);
 
+                // Il push va applicato SOLO se il giocatore si sovrappone anche
+                // in verticale alla cassa: senza questo controllo, saltando
+                // sopra una cassa (es. scavalcando un muro) la si spingeva lo
+                // stesso solo perche' orizzontalmente vicina, anche a mezz'aria
+                // ben sopra di essa - causando spinte enormi e casse che
+                // finivano teletrasportate dentro/oltre i muri.
                 float crateMinY = cratePos.y - crateSize.y / 2.0f;
                 float crateMaxY = cratePos.y + crateSize.y / 2.0f;
                 bool verticalOverlap = (run.player.position.y + run.player.radius > crateMinY) &&
@@ -304,6 +366,7 @@ int main() {
                         cratePos.z += (dz >= 0.0f) ? overlapZ : -overlapZ;
                     }
 
+                    // Se la cassa spinta incontra un'altra cassa o un muro, si ferma (viene bloccata)
                     for (int iter = 0; iter < 2; iter++) {
                         for (size_t j = 0; j < run.draggablePos.size(); j++) {
                             if (i == j) continue;
@@ -311,14 +374,15 @@ int main() {
                                                      run.draggablePos[j], currentLevel.draggables[j].size);
                         }
                         float crateRadius = std::max(crateSize.x, crateSize.z) / 2.0f;
-                        ResolveObstacles(cratePos, crateRadius, currentLevel.obstacles);
-                        ResolveDoors(cratePos, crateRadius, currentLevel.doors, run.doorHeights);
+                        ResolveObstacles(cratePos, crateRadius, currentLevel.obstacles, run.currentSubworld);
+                        ResolveDoors(cratePos, crateRadius, currentLevel.doors, run.doorHeights, run.currentSubworld);
                     }
 
                     ResolveBoxCollision(run.player.position, run.player.radius, cratePos, crateSize);
                 }
             }
 
+            // Risoluzione generale tra tutte le casse e ostacoli
             for (int iter = 0; iter < 2; iter++) {
                 for (size_t i = 0; i < run.draggablePos.size(); i++) {
                     for (size_t j = 0; j < run.draggablePos.size(); j++) {
@@ -329,8 +393,8 @@ int main() {
                 }
                 for (size_t i = 0; i < run.draggablePos.size(); i++) {
                     float crateRadius = std::max(currentLevel.draggables[i].size.x, currentLevel.draggables[i].size.z) / 2.0f;
-                    ResolveObstacles(run.draggablePos[i], crateRadius, currentLevel.obstacles);
-                    ResolveDoors(run.draggablePos[i], crateRadius, currentLevel.doors, run.doorHeights);
+                    ResolveObstacles(run.draggablePos[i], crateRadius, currentLevel.obstacles, run.currentSubworld);
+                    ResolveDoors(run.draggablePos[i], crateRadius, currentLevel.doors, run.doorHeights, run.currentSubworld);
                 }
             }
 
@@ -344,7 +408,7 @@ int main() {
                 dp.y += dv.y * dt;
 
                 float groundY;
-                bool hasGround = FindGroundY(currentLevel, dp.x, dp.z, prevBottomY + 0.05f, groundY);
+                bool hasGround = FindGroundY(currentLevel, dp.x, dp.z, prevBottomY + 0.05f, run.currentSubworld, groundY);
                 if (hasGround && dp.y - halfH <= groundY && dv.y <= 0.0f) {
                     dp.y = groundY + halfH;
                     dv.y = 0.0f;
@@ -398,9 +462,9 @@ int main() {
                 run.padPressed[i] = pressed;
             }
 
-            run.beams = ComputeLightBeams(ApplyMirrorAngles(currentLevel, run.mirrorAngles), run.doorHeights, run.draggablePos, run.receiverLit);
+            run.beams = ComputeLightBeams(ApplyMirrorAngles(currentLevel, run.mirrorAngles), run.doorHeights, run.draggablePos, run.currentSubworld, run.receiverLit);
 
-            bool allDoorsOpened = true;
+            // aggiornamento porte and / or
             for (size_t i = 0; i < currentLevel.doors.size(); i++) {
                 const LevelDoor& door = currentLevel.doors[i];
 
@@ -408,6 +472,7 @@ int main() {
                 std::transform(op.begin(), op.end(), op.begin(), ::tolower);
                 bool isAnd = (op == "and");
 
+                // 1. Interruttori collegati
                 bool switchesSatisfied = true;
                 bool hasSwitchInput = !door.linkedSwitches.empty() || door.linkedSwitch >= 0;
 
@@ -420,7 +485,7 @@ int main() {
                                 break;
                             }
                         }
-                    } else {
+                    } else { // "OR"
                         switchesSatisfied = false;
                         for (int swIdx : door.linkedSwitches) {
                             if (swIdx >= 0 && swIdx < (int)run.activated.size() && run.activated[swIdx]) {
@@ -436,6 +501,7 @@ int main() {
                     switchesSatisfied = false;
                 }
 
+                // 2. Pedane collegate
                 std::vector<bool> connectedPadsStates;
                 for (size_t pIdx = 0; pIdx < currentLevel.pads.size(); pIdx++) {
                     if (currentLevel.pads[pIdx].linkedDoor == (int)i) {
@@ -455,7 +521,7 @@ int main() {
                                 break;
                             }
                         }
-                    } else {
+                    } else { // "OR"
                         padsSatisfied = false;
                         for (bool pressed : connectedPadsStates) {
                             if (pressed) {
@@ -468,6 +534,7 @@ int main() {
                     padsSatisfied = false;
                 }
 
+                // 3. Ricevitori di luce collegati
                 std::vector<bool> connectedReceiverStates;
                 for (size_t rIdx = 0; rIdx < currentLevel.receivers.size(); rIdx++) {
                     if (currentLevel.receivers[rIdx].linkedDoor == (int)i) {
@@ -484,7 +551,7 @@ int main() {
                         for (bool lit : connectedReceiverStates) {
                             if (!lit) { receiversSatisfied = false; break; }
                         }
-                    } else {
+                    } else { // "OR"
                         receiversSatisfied = false;
                         for (bool lit : connectedReceiverStates) {
                             if (lit) { receiversSatisfied = true; break; }
@@ -494,6 +561,8 @@ int main() {
                     receiversSatisfied = false;
                 }
 
+                // 4. Combinazione finale (tutte le sorgenti collegate a questa porta,
+                // qualunque sia il loro tipo, vengono combinate con lo stesso AND/OR)
                 bool hasAnyInput = hasSwitchInput || hasPadInput || hasReceiverInput;
                 bool shouldBeOpen;
                 if (hasAnyInput) {
@@ -512,17 +581,12 @@ int main() {
                     shouldBeOpen = run.solved;
                 }
 
-                if (!shouldBeOpen) allDoorsOpened = false;
-
                 float target = shouldBeOpen ? 0.0f : door.size.y;
                 float speed = dt * 2.0f;
                 if (run.doorHeights[i] < target) run.doorHeights[i] = std::min(target, run.doorHeights[i] + speed);
                 else if (run.doorHeights[i] > target) run.doorHeights[i] = std::max(target, run.doorHeights[i] - speed);
             }
-
-            if (!currentLevel.doors.empty() && allDoorsOpened) {
-                run.solved = true;
-            }
+            
 
             if (!run.won) run.elapsedTime += dt;
 
@@ -556,6 +620,9 @@ int main() {
             }
         }
 
+   
+        // Disegno
+   
         BeginDrawing();
         ClearBackground(RAYWHITE);
 
@@ -624,29 +691,14 @@ int main() {
             const auto& levels = levelManager.GetLevels();
             const auto& errs = levelManager.GetErrors();
 
-            const float selectTop = 100.0f;
-            const float selectBottom = 620.0f;
-            Rectangle selectVisibleRect = { 0, selectTop, (float)screenWidth, selectBottom - selectTop };
-
-            if (CheckCollisionPointRec(GetMousePosition(), selectVisibleRect)) {
-                levelSelectScroll -= GetMouseWheelMove() * 35.0f;
-            }
-            if (levelSelectScroll < 0.0f) levelSelectScroll = 0.0f;
-
-            g_uiScrollOffsetY = levelSelectScroll;
-            BeginScissorMode((int)selectVisibleRect.x, (int)selectVisibleRect.y, (int)selectVisibleRect.width, (int)selectVisibleRect.height);
-            rlPushMatrix();
-            rlTranslatef(0, -levelSelectScroll, 0);
-
-            float listY = selectTop + 10.0f;
+            float listY = 110;
             for (int i = 0; i < (int)levels.size(); i++) {
-                Rectangle card = { 40, listY, screenWidth - 100.0f, 64 };
+                Rectangle card = { 40, listY, screenWidth - 80.0f, 64 };
                 bool isSel = (selectedLevel == i);
                 Color base = isSel ? Fade(DARKGREEN, 0.85f) : Fade(LIGHTGRAY, 0.9f);
                 Color hover = isSel ? DARKGREEN : Fade(SKYBLUE, 0.9f);
                 Color textCol = isSel ? WHITE : BLACK;
-                
-                std::string label = levels[i].name;
+                std::string label = TextFormat("%d.  %s", i + 1, levels[i].name.c_str());
                 if (DrawButton(card, label.c_str(), 22, base, hover, textCol)) {
                     selectedLevel = i;
                 }
@@ -659,7 +711,7 @@ int main() {
                     std::string recordText = "Record: " + FormatTime(hsIt->second.bestTime) +
                                               "  -  " + std::to_string(hsIt->second.bestScore) + " punti";
                     int rtw = MeasureText(recordText.c_str(), 14);
-                    DrawText(recordText.c_str(), (int)(screenWidth - 120 - rtw), (int)(listY + 22), 14,
+                    DrawText(recordText.c_str(), (int)(screenWidth - 60 - rtw), (int)(listY + 22), 14,
                               isSel ? GOLD : DARKGREEN);
                 }
                 listY += 74;
@@ -670,23 +722,6 @@ int main() {
             }
             for (size_t i = 0; i < errs.size(); i++) {
                 DrawText(errs[i].c_str(), 40, (int)(listY + 10 + i * 20), 14, MAROON);
-            }
-
-            float contentHeight = listY - selectTop;
-
-            rlPopMatrix();
-            EndScissorMode();
-            g_uiScrollOffsetY = 0.0f;
-
-            float maxScroll = std::max(0.0f, contentHeight - (selectBottom - selectTop));
-            if (levelSelectScroll > maxScroll) levelSelectScroll = maxScroll;
-
-            if (maxScroll > 0.0f) {
-                Rectangle track = { screenWidth - 30.0f, selectTop, 6, selectBottom - selectTop };
-                DrawRectangleRec(track, Fade(LIGHTGRAY, 0.6f));
-                float thumbH = std::max(24.0f, track.height * (track.height / contentHeight));
-                float thumbY = track.y + (track.height - thumbH) * (levelSelectScroll / maxScroll);
-                DrawRectangleRec(Rectangle{ track.x, thumbY, track.width, thumbH }, DARKGRAY);
             }
 
             Rectangle backBtn = { 40, screenHeight - 80.0f, 200, 50 };
@@ -918,6 +953,7 @@ int main() {
             rs.showPlayer = true;
             rs.playerPosition = run.player.position;
             rs.playerRadius = run.player.radius;
+            rs.subworld = run.currentSubworld;
 
             BeginMode3D(camera);
             DrawLevelScene(ApplyMirrorAngles(currentLevel, run.mirrorAngles), rs, camera, &crateModel);
@@ -965,6 +1001,7 @@ int main() {
                 DrawText(hintText.c_str(), screenWidth / 2 - htw / 2, 120, 20, GOLD);
             }
 
+            // --- HUD ---
             DrawText(currentLevel.name.c_str(), 10, 10, 22, DARKBLUE);
             DrawText("Muoviti con WASD, SPAZIO per saltare. Tocca un interruttore e premi E per attivarlo.",
                       10, 36, 16, DARKGRAY);
@@ -983,6 +1020,7 @@ int main() {
             }
 
             DrawText(TextFormat("Tempo: %s", FormatTime(run.elapsedTime).c_str()), 10, 102, 18, DARKGREEN);
+            DrawText(TextFormat("Mondo: %d / 4", run.currentSubworld + 1), 10, 124, 18, PURPLE);
             DrawText("ESC: torna indietro   |   R: ricomincia", 10, screenHeight - 26, 16, DARKGRAY);
 
             {

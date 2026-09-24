@@ -13,6 +13,7 @@ struct LevelPad {
     Vector3 size{ 1.5f, 0.1f, 1.5f };
     Color color = RED;
     int linkedDoor = -1;
+    int subworld = -1;                     // -1 = condivisa tra tutti i sub-mondi
 };
 
 std::vector<LevelPad> ParsePadsField(const nlohmann::json& root);

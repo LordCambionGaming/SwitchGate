@@ -10,6 +10,7 @@ std::vector<LevelSwitch> ParseSwitchesField(const json& root) {
         if (s.contains("position")) sw.position = ParseVec3(s["position"], sw.position);
         if (s.contains("color")) sw.color = ParseColor(s["color"], sw.color);
         if (s.contains("name")) sw.name = s["name"].get<std::string>();
+        if (s.contains("subworld")) sw.subworld = s["subworld"].get<int>();
         out.push_back(sw);
     }
     return out;
@@ -21,7 +22,8 @@ json SwitchesToJson(const std::vector<LevelSwitch>& switches) {
         arr.push_back({
             { "position", Vec3ToJson(s.position) },
             { "color", ColorToJson(s.color) },
-            { "name", s.name }
+            { "name", s.name },
+            { "subworld", s.subworld }
         });
     }
     return arr;

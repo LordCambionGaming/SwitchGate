@@ -12,6 +12,7 @@ std::vector<LevelMirror> ParseMirrorsField(const json& root) {
         if (m.contains("length")) mir.length = m["length"].get<float>();
         if (m.contains("height")) mir.height = m["height"].get<float>();
         if (m.contains("color")) mir.color = ParseColor(m["color"], mir.color);
+        if (m.contains("subworld")) mir.subworld = m["subworld"].get<int>();
         out.push_back(mir);
     }
     return out;
@@ -25,7 +26,8 @@ json MirrorsToJson(const std::vector<LevelMirror>& mirrors) {
             { "angle", m.angleDeg },
             { "length", m.length },
             { "height", m.height },
-            { "color", ColorToJson(m.color) }
+            { "color", ColorToJson(m.color) },
+            { "subworld", m.subworld }
         });
     }
     return arr;

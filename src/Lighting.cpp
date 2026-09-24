@@ -65,6 +65,7 @@ static float RayCircleHitXZ(Vector3 origin, Vector3 dir, Vector3 center, float r
 std::vector<LightBeamSegment> ComputeLightBeams(const LevelData& level,
                                                  const std::vector<float>& doorHeights,
                                                  const std::vector<Vector3>& draggablePositions,
+                                                 int subworld,
                                                  std::vector<bool>& receiverLit) {
     std::vector<LightBeamSegment> segments;
     receiverLit.assign(level.receivers.size(), false);
@@ -75,6 +76,7 @@ std::vector<LightBeamSegment> ComputeLightBeams(const LevelData& level,
     const float receiverHeightTolerance = 0.6f;
 
     for (const auto& emitter : level.emitters) {
+        if (emitter.subworld != -1 && emitter.subworld != subworld) continue; // emettitore di un altro sub-mondo: spento
         Vector3 pos = emitter.position;
         Vector3 dir = DirFromAngleDeg(emitter.angleDeg);
 
@@ -86,6 +88,7 @@ std::vector<LightBeamSegment> ComputeLightBeams(const LevelData& level,
 
             for (size_t m = 0; m < level.mirrors.size(); m++) {
                 const auto& mir = level.mirrors[m];
+                if (mir.subworld != -1 && mir.subworld != subworld) continue; // specchio di un altro sub-mondo: il raggio lo attraversa
                 if (fabsf(pos.y - mir.position.y) > mir.height / 2.0f) continue;
                 Vector3 mDir = DirFromAngleDeg(mir.angleDeg);
                 Vector3 half = Vector3Scale(mDir, mir.length / 2.0f);
@@ -101,6 +104,7 @@ std::vector<LightBeamSegment> ComputeLightBeams(const LevelData& level,
             }
 
             for (const auto& o : level.obstacles) {
+                if (o.subworld != -1 && o.subworld != subworld) continue;
                 if (pos.y < o.position.y - o.size.y / 2.0f || pos.y > o.position.y + o.size.y / 2.0f) continue;
                 float t = RayBoxHitXZ(pos, dir,
                                        o.position.x - o.size.x / 2.0f, o.position.x + o.size.x / 2.0f,
@@ -112,6 +116,7 @@ std::vector<LightBeamSegment> ComputeLightBeams(const LevelData& level,
             // ATTUALE (il giocatore le puo' spingere), non in quella di
             // partenza salvata nel livello.
             for (size_t c = 0; c < level.draggables.size() && c < draggablePositions.size(); c++) {
+                if (level.draggables[c].subworld != -1 && level.draggables[c].subworld != subworld) continue;
                 Vector3 cp = draggablePositions[c];
                 Vector3 cs = level.draggables[c].size;
                 if (pos.y < cp.y - cs.y / 2.0f || pos.y > cp.y + cs.y / 2.0f) continue;
@@ -122,6 +127,7 @@ std::vector<LightBeamSegment> ComputeLightBeams(const LevelData& level,
             }
 
             for (size_t d = 0; d < level.doors.size(); d++) {
+                if (level.doors[d].subworld != -1 && level.doors[d].subworld != subworld) continue;
                 // Altezza ANIMATA attuale della porta (quella che si vede rimpicciolire
                 // mentre sprofonda nel pavimento), non quella statica configurata: cosi'
                 // il raggio passa sopra la porta non appena questa e' scesa sotto la sua
@@ -139,6 +145,7 @@ std::vector<LightBeamSegment> ComputeLightBeams(const LevelData& level,
 
             for (size_t r = 0; r < level.receivers.size(); r++) {
                 const auto& rec = level.receivers[r];
+                if (rec.subworld != -1 && rec.subworld != subworld) continue; // ricevitore di un altro sub-mondo: il raggio lo attraversa
                 if (fabsf(pos.y - rec.position.y) > receiverHeightTolerance) continue;
                 float t = RayCircleHitXZ(pos, dir, rec.position, rec.radius);
                 if (t > 0.01f && t < bestT) { bestT = t; hitType = Hit::Receiver; hitIndex = (int)r; }

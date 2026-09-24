@@ -11,6 +11,7 @@ std::vector<LevelReceiver> ParseReceiversField(const json& root) {
         if (r.contains("radius")) rec.radius = r["radius"].get<float>();
         if (r.contains("color")) rec.color = ParseColor(r["color"], rec.color);
         if (r.contains("linked_door")) rec.linkedDoor = r["linked_door"].get<int>();
+        if (r.contains("subworld")) rec.subworld = r["subworld"].get<int>();
         out.push_back(rec);
     }
     return out;
@@ -23,7 +24,8 @@ json ReceiversToJson(const std::vector<LevelReceiver>& receivers) {
             { "position", Vec3ToJson(r.position) },
             { "radius", r.radius },
             { "color", ColorToJson(r.color) },
-            { "linked_door", r.linkedDoor }
+            { "linked_door", r.linkedDoor },
+            { "subworld", r.subworld }
         });
     }
     return arr;

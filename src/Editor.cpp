@@ -189,18 +189,27 @@ void LevelEditor::PickAt() {
         RayCollision hit = GetRayCollisionBox(ray, box);
         if (hit.hit && hit.distance < bestDist) { bestDist = hit.distance; bestType = type; bestIndex = index; }
     };
+    // Vero se un oggetto di quel sub-mondo va considerato mentre si guarda
+    // activeSubworld (-1 = "Tutti i mondi": si vede/seleziona sempre tutto).
+    auto inView = [&](int objSubworld) {
+        return activeSubworld == -1 || objSubworld == -1 || objSubworld == activeSubworld;
+    };
 
     for (int i = 0; i < (int)working.switches.size(); i++)
-        considerBox(working.switches[i].position, Vector3{ 1, 1, 1 }, EditorSelType::SWITCH, i);
+        if (inView(working.switches[i].subworld))
+            considerBox(working.switches[i].position, Vector3{ 1, 1, 1 }, EditorSelType::SWITCH, i);
 
     for (int i = 0; i < (int)working.emitters.size(); i++)
         // Sfera un po' piu' larga del raggio disegnato (0.25) per rendere il click piu' comodo.
-        considerSphere(working.emitters[i].position, 0.45f, EditorSelType::EMITTER, i);
+        if (inView(working.emitters[i].subworld))
+            considerSphere(working.emitters[i].position, 0.45f, EditorSelType::EMITTER, i);
 
     for (int i = 0; i < (int)working.receivers.size(); i++)
-        considerSphere(working.receivers[i].position, working.receivers[i].radius + 0.2f, EditorSelType::RECEIVER, i);
+        if (inView(working.receivers[i].subworld))
+            considerSphere(working.receivers[i].position, working.receivers[i].radius + 0.2f, EditorSelType::RECEIVER, i);
 
     for (int i = 0; i < (int)working.mirrors.size(); i++) {
+        if (!inView(working.mirrors[i].subworld)) continue;
         // Stesso quadrilatero disegnato in Rendering.cpp per il pannello dello specchio.
         const auto& m = working.mirrors[i];
         Vector3 mDir = DirFromAngleDeg(m.angleDeg);
@@ -219,19 +228,24 @@ void LevelEditor::PickAt() {
     considerSphere(working.exitPosition, working.exitRadius + 0.2f, EditorSelType::EXIT, -1);
 
     for (int i = 0; i < (int)working.doors.size(); i++) {
+        if (!inView(working.doors[i].subworld)) continue;
         const auto& d = working.doors[i];
         Vector3 eff = GetDoorEffectiveSize(d);
         Vector3 c = { d.position.x, d.position.y + eff.y / 2.0f, d.position.z };
         considerBox(c, eff, EditorSelType::DOOR, i);
     }
     for (int i = 0; i < (int)working.pads.size(); i++)
-        considerBox(working.pads[i].position, working.pads[i].size, EditorSelType::PAD, i);
+        if (inView(working.pads[i].subworld))
+            considerBox(working.pads[i].position, working.pads[i].size, EditorSelType::PAD, i);
     for (int i = 0; i < (int)working.draggables.size(); i++)
-        considerBox(working.draggables[i].position, working.draggables[i].size, EditorSelType::DRAGGABLE, i);
+        if (inView(working.draggables[i].subworld))
+            considerBox(working.draggables[i].position, working.draggables[i].size, EditorSelType::DRAGGABLE, i);
     for (int i = 0; i < (int)working.obstacles.size(); i++)
-        considerBox(working.obstacles[i].position, working.obstacles[i].size, EditorSelType::OBSTACLE, i);
+        if (inView(working.obstacles[i].subworld))
+            considerBox(working.obstacles[i].position, working.obstacles[i].size, EditorSelType::OBSTACLE, i);
     for (int i = 0; i < (int)working.platforms.size(); i++)
-        considerBox(working.platforms[i].position, working.platforms[i].size, EditorSelType::PLATFORM, i);
+        if (inView(working.platforms[i].subworld))
+            considerBox(working.platforms[i].position, working.platforms[i].size, EditorSelType::PLATFORM, i);
 
     if (bestType != EditorSelType::NONE) { selType = bestType; selIndex = bestIndex; return; }
     ClearSelection();
@@ -308,6 +322,76 @@ void LevelEditor::SetSelectedPosition(Vector3 pos) {
             working.playerStart = pos; break;
         case EditorSelType::EXIT:
             working.exitPosition = pos; break;
+        default: break;
+    }
+}
+
+// Partenza e uscita sono uniche per l'intero livello (non hanno un campo
+// subworld proprio): restano sempre condivise, qualunque mondo si stia
+// guardando. Tutto il resto puo' essere assegnato a un mondo specifico.
+bool LevelEditor::GetSelectedSubworld(int& outSw) const {
+    switch (selType) {
+        case EditorSelType::SWITCH:
+            if (selIndex >= 0 && selIndex < (int)working.switches.size()) { outSw = working.switches[selIndex].subworld; return true; }
+            break;
+        case EditorSelType::EMITTER:
+            if (selIndex >= 0 && selIndex < (int)working.emitters.size()) { outSw = working.emitters[selIndex].subworld; return true; }
+            break;
+        case EditorSelType::RECEIVER:
+            if (selIndex >= 0 && selIndex < (int)working.receivers.size()) { outSw = working.receivers[selIndex].subworld; return true; }
+            break;
+        case EditorSelType::MIRROR:
+            if (selIndex >= 0 && selIndex < (int)working.mirrors.size()) { outSw = working.mirrors[selIndex].subworld; return true; }
+            break;
+        case EditorSelType::DOOR:
+            if (selIndex >= 0 && selIndex < (int)working.doors.size()) { outSw = working.doors[selIndex].subworld; return true; }
+            break;
+        case EditorSelType::PAD:
+            if (selIndex >= 0 && selIndex < (int)working.pads.size()) { outSw = working.pads[selIndex].subworld; return true; }
+            break;
+        case EditorSelType::DRAGGABLE:
+            if (selIndex >= 0 && selIndex < (int)working.draggables.size()) { outSw = working.draggables[selIndex].subworld; return true; }
+            break;
+        case EditorSelType::OBSTACLE:
+            if (selIndex >= 0 && selIndex < (int)working.obstacles.size()) { outSw = working.obstacles[selIndex].subworld; return true; }
+            break;
+        case EditorSelType::PLATFORM:
+            if (selIndex >= 0 && selIndex < (int)working.platforms.size()) { outSw = working.platforms[selIndex].subworld; return true; }
+            break;
+        default: break;
+    }
+    return false;
+}
+
+void LevelEditor::SetSelectedSubworld(int sw) {
+    switch (selType) {
+        case EditorSelType::SWITCH:
+            if (selIndex >= 0 && selIndex < (int)working.switches.size()) working.switches[selIndex].subworld = sw;
+            break;
+        case EditorSelType::EMITTER:
+            if (selIndex >= 0 && selIndex < (int)working.emitters.size()) working.emitters[selIndex].subworld = sw;
+            break;
+        case EditorSelType::RECEIVER:
+            if (selIndex >= 0 && selIndex < (int)working.receivers.size()) working.receivers[selIndex].subworld = sw;
+            break;
+        case EditorSelType::MIRROR:
+            if (selIndex >= 0 && selIndex < (int)working.mirrors.size()) working.mirrors[selIndex].subworld = sw;
+            break;
+        case EditorSelType::DOOR:
+            if (selIndex >= 0 && selIndex < (int)working.doors.size()) working.doors[selIndex].subworld = sw;
+            break;
+        case EditorSelType::PAD:
+            if (selIndex >= 0 && selIndex < (int)working.pads.size()) working.pads[selIndex].subworld = sw;
+            break;
+        case EditorSelType::DRAGGABLE:
+            if (selIndex >= 0 && selIndex < (int)working.draggables.size()) working.draggables[selIndex].subworld = sw;
+            break;
+        case EditorSelType::OBSTACLE:
+            if (selIndex >= 0 && selIndex < (int)working.obstacles.size()) working.obstacles[selIndex].subworld = sw;
+            break;
+        case EditorSelType::PLATFORM:
+            if (selIndex >= 0 && selIndex < (int)working.platforms.size()) working.platforms[selIndex].subworld = sw;
+            break;
         default: break;
     }
 }
@@ -591,6 +675,7 @@ void LevelEditor::Update() {
                 box.size.x = sizeX;
                 box.size.z = sizeZ;
                 box.color = kPalette[colorIndex].second;
+                box.subworld = activeSubworld;
 
                 if (tool == EditorTool::PLATFORM) {
                     box.size.y = 0.5f;
@@ -614,6 +699,7 @@ void LevelEditor::Update() {
             sw.position = Vector3{ mw.x, newPlatformTopY + 0.5f, mw.y };
             sw.color = kPalette[colorIndex].second;
             sw.name = ColorDisplayName(colorIndex);
+            sw.subworld = activeSubworld;
             working.switches.push_back(sw);
             working.fixedSequence.push_back((int)working.switches.size() - 1);
             selType = EditorSelType::SWITCH;
@@ -636,6 +722,7 @@ void LevelEditor::Update() {
             door.color = DARKBROWN;
             door.linkedSwitch = -1;
             door.logicOp = "OR";
+            door.subworld = activeSubworld;
             working.doors.push_back(door);
             selType = EditorSelType::DOOR;
             selIndex = (int)working.doors.size() - 1;
@@ -649,6 +736,7 @@ void LevelEditor::Update() {
             pad.size = Vector3{ 1.5f, 0.1f, 1.5f };
             pad.color = kPalette[colorIndex].second;
             pad.linkedDoor = -1;
+            pad.subworld = activeSubworld;
             working.pads.push_back(pad);
             selType = EditorSelType::PAD;
             selIndex = (int)working.pads.size() - 1;
@@ -663,6 +751,7 @@ void LevelEditor::Update() {
             mir.length = 2.0f;
             mir.height = 2.0f;
             mir.color = kPalette[colorIndex].second;
+            mir.subworld = activeSubworld;
             working.mirrors.push_back(mir);
             selType = EditorSelType::MIRROR;
             selIndex = (int)working.mirrors.size() - 1;
@@ -675,6 +764,7 @@ void LevelEditor::Update() {
             em.position = Vector3{ mw.x, newPlatformTopY + 1.0f, mw.y };
             em.angleDeg = newAngleDeg;
             em.color = kPalette[colorIndex].second;
+            em.subworld = activeSubworld;
             working.emitters.push_back(em);
             selType = EditorSelType::EMITTER;
             selIndex = (int)working.emitters.size() - 1;
@@ -688,6 +778,7 @@ void LevelEditor::Update() {
             rec.radius = 0.4f;
             rec.color = kPalette[colorIndex].second;
             rec.linkedDoor = -1;
+            rec.subworld = activeSubworld;
             working.receivers.push_back(rec);
             selType = EditorSelType::RECEIVER;
             selIndex = (int)working.receivers.size() - 1;
@@ -781,6 +872,28 @@ void LevelEditor::DrawSidebar() {
             ClearSelection();
         }
         y += 31;
+    }
+
+    y += 6;
+    DrawText("MONDO (visualizzato/costruito)", (int)x, (int)y, 11, DARKGRAY); y += 15;
+    {
+        // "Tutti" mostra e seleziona ogni oggetto, di qualunque mondo (utile
+        // per una visione d'insieme); scegliendo 1-4 si vedono e si piazzano
+        // solo gli oggetti di quel mondo piu' quelli condivisi.
+        struct WorldBtn { int sw; const char* label; };
+        WorldBtn worlds[] = { { -1, "Tutti" }, { 0, "1" }, { 1, "2" }, { 2, "3" }, { 3, "4" } };
+        float bw = (w - 4 * 4.0f) / 5.0f;
+        float bx = x;
+        for (auto& wb : worlds) {
+            Rectangle r = { bx, y, bw, 28 };
+            bool active = (activeSubworld == wb.sw);
+            if (DrawButton(r, wb.label, 13, active ? DARKGREEN : Fade(LIGHTGRAY, 0.9f), active ? GREEN : Fade(SKYBLUE, 0.7f), active ? WHITE : BLACK)) {
+                activeSubworld = wb.sw;
+                ClearSelection();
+            }
+            bx += bw + 4.0f;
+        }
+        y += 32;
     }
 
     y += 6;
@@ -894,6 +1007,19 @@ void LevelEditor::DrawSidebar() {
     if (selType != EditorSelType::NONE) {
         DrawRectangle((int)x, (int)y, (int)w, 2, Fade(BLACK, 0.2f)); y += 10;
         DrawText("OGGETTO SELEZIONATO", (int)x, (int)y, 13, DARKBLUE); y += 18;
+
+        {
+            int curSw;
+            if (GetSelectedSubworld(curSw)) {
+                DrawText("Mondo di questo oggetto:", (int)x, (int)y, 11, DARKGRAY); y += 14;
+                Rectangle m = { x, y, 28, 26 }, p = { x + w - 28, y, 28, 26 };
+                if (DrawMiniButton(m, "<", LIGHTGRAY, GRAY)) SetSelectedSubworld(curSw <= -1 ? 3 : curSw - 1);
+                std::string label = (curSw == -1) ? "Condiviso (tutti)" : ("Mondo " + std::to_string(curSw + 1));
+                DrawText(label.c_str(), (int)(x + w / 2 - MeasureText(label.c_str(), 14) / 2), (int)y + 5, 14, BLACK);
+                if (DrawMiniButton(p, ">", LIGHTGRAY, GRAY)) SetSelectedSubworld(curSw >= 3 ? -1 : curSw + 1);
+                y += 32;
+            }
+        }
 
         if (selType == EditorSelType::SWITCH && selIndex >= 0 && selIndex < (int)working.switches.size()) {
             LevelSwitch& sw = working.switches[selIndex];
@@ -1250,7 +1376,8 @@ void LevelEditor::DrawCanvas() {
         DrawGrid(gridSlices, gridSpacing);
 
         SceneRenderState rs = MakeIdleSceneState(working);
-        rs.beams = ComputeLightBeams(working, rs.doorHeights, rs.draggablePositions, rs.receiverLit);
+        rs.subworld = activeSubworld;
+        rs.beams = ComputeLightBeams(working, rs.doorHeights, rs.draggablePositions, activeSubworld, rs.receiverLit);
         DrawLevelScene(working, rs, camera, nullptr);
 
         // Marcatore sempre visibile del punto di partenza: prima c'era solo
@@ -1346,8 +1473,13 @@ void LevelEditor::DrawCanvas() {
         }
     EndMode3D();
 
-    // Etichette 2D sovrapposte (proiettate dalla scena 3D)
+    // Etichette 2D sovrapposte (proiettate dalla scena 3D). Solo per gli
+    // oggetti effettivamente visibili nel mondo che si sta guardando.
+    auto labelInView = [&](int objSubworld) {
+        return activeSubworld == -1 || objSubworld == -1 || objSubworld == activeSubworld;
+    };
     for (size_t i = 0; i < working.switches.size(); i++) {
+        if (!labelInView(working.switches[i].subworld)) continue;
         Vector2 sp = WorldToScreen(Vector3Add(working.switches[i].position, Vector3{ 0, 0.9f, 0 }));
         const char* label = working.switches[i].name.c_str();
         DrawText(label, (int)sp.x - MeasureText(label, 14) / 2, (int)sp.y - 16, 14, BLACK);
@@ -1357,12 +1489,14 @@ void LevelEditor::DrawCanvas() {
         DrawText("START", (int)sp.x - 22, (int)sp.y - 16, 13, MAROON);
     }
     for (size_t i = 0; i < working.doors.size(); i++) {
+        if (!labelInView(working.doors[i].subworld)) continue;
         const auto& d = working.doors[i];
         Vector2 sp = WorldToScreen(Vector3{ d.position.x, d.size.y + 0.3f, d.position.z });
         std::string info = "P" + std::to_string(i + 1) + " [" + d.logicOp + "]";
         DrawText(info.c_str(), (int)sp.x - MeasureText(info.c_str(), 13) / 2, (int)sp.y - 14, 13, DARKBLUE);
     }
     for (size_t i = 0; i < working.pads.size(); i++) {
+        if (!labelInView(working.pads[i].subworld)) continue;
         const auto& p = working.pads[i];
         if (p.linkedDoor >= 0 && p.linkedDoor < (int)working.doors.size()) {
             Vector2 sp = WorldToScreen(Vector3Add(p.position, Vector3{ 0, 0.4f, 0 }));
@@ -1371,10 +1505,12 @@ void LevelEditor::DrawCanvas() {
         }
     }
     for (size_t i = 0; i < working.emitters.size(); i++) {
+        if (!labelInView(working.emitters[i].subworld)) continue;
         Vector2 sp = WorldToScreen(Vector3Add(working.emitters[i].position, Vector3{ 0, 0.45f, 0 }));
         DrawText("EMIT", (int)sp.x - 15, (int)sp.y - 14, 11, BLACK);
     }
     for (size_t i = 0; i < working.receivers.size(); i++) {
+        if (!labelInView(working.receivers[i].subworld)) continue;
         const auto& rec = working.receivers[i];
         Vector2 sp = WorldToScreen(Vector3Add(rec.position, Vector3{ 0, rec.radius + 0.35f, 0 }));
         std::string label = "RICEV";
@@ -1382,6 +1518,7 @@ void LevelEditor::DrawCanvas() {
         DrawText(label.c_str(), (int)sp.x - MeasureText(label.c_str(), 11) / 2, (int)sp.y - 12, 11, DARKBLUE);
     }
     for (size_t i = 0; i < working.mirrors.size(); i++) {
+        if (!labelInView(working.mirrors[i].subworld)) continue;
         const auto& mir = working.mirrors[i];
         Vector2 sp = WorldToScreen(Vector3Add(mir.position, Vector3{ 0, mir.height / 2.0f + 0.25f, 0 }));
         std::string label = TextFormat("%.0f gradi", mir.angleDeg);

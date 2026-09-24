@@ -24,14 +24,14 @@ extern const float MOVE_SPEED;
 // piccolo margine), cosi' si considerano solo le superfici su cui si poteva
 // gia' essere appoggiati. Se ritorna false, non c'e' nessuna piattaforma
 // valida li' sotto: si sta cadendo.
-bool FindGroundY(const LevelData& level, float x, float z, float maxY, float& outY);
+bool FindGroundY(const LevelData& level, float x, float z, float maxY, int subworld, float& outY);
 
 // Speculare a FindGroundY: trova il bordo inferiore piu' basso tra le
 // piattaforme sopra un punto (x, z), considerando solo quelle il cui fondo
 // non e' piu' basso di minY (la quota della testa/parte superiore PRIMA del
 // passo di fisica corrente). Usata per bloccare chi salta contro il fondo
 // di una piattaforma invece di lasciarlo attraversarla.
-bool FindCeilingY(const LevelData& level, float x, float z, float minY, float& outY);
+bool FindCeilingY(const LevelData& level, float x, float z, float minY, int subworld, float& outY);
 
 // Spinge un punto (giocatore o cassa) fuori da un parallelepipedo solido:
 // semplice risoluzione per assi separati (x poi z).
@@ -41,14 +41,14 @@ void ResolveBoxCollision(Vector3& pos, float radius, Vector3 boxPos, Vector3 box
 // fuori da B) senza muovere B.
 void ResolveBoxToBoxCollision(Vector3& posA, Vector3 sizeA, Vector3& posB, Vector3 sizeB);
 
-void ResolveObstacles(Vector3& pos, float radius, const std::vector<LevelBox>& obstacles);
+void ResolveObstacles(Vector3& pos, float radius, const std::vector<LevelBox>& obstacles, int subworld);
 
 // Una porta blocca il passaggio solo mentre non e' (quasi) del tutto aperta;
 // l'altezza attuale viene dall'animazione della partita in corso, non dal
 // dato statico del livello.
-void ResolveDoors(Vector3& pos, float radius, const std::vector<LevelDoor>& doors, const std::vector<float>& doorHeights);
+void ResolveDoors(Vector3& pos, float radius, const std::vector<LevelDoor>& doors, const std::vector<float>& doorHeights, int subworld);
 
 // Aggiorna la fisica del giocatore per un frame: movimento orizzontale,
 // collisioni con ostacoli/porte, gravita', salto, e il "respawn" quando si
 // cade in un pozzo sotto fallResetY.
-void UpdatePlayerPhysics(Player& player, const LevelData& level, const std::vector<float>& doorHeights, Vector3 moveInput, float dt, bool jumpPressed);
+void UpdatePlayerPhysics(Player& player, const LevelData& level, const std::vector<float>& doorHeights, Vector3 moveInput, float dt, bool jumpPressed, int subworld);
