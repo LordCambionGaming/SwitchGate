@@ -123,6 +123,19 @@ static void StartRun(RunState& run, const LevelData& level, std::mt19937& rng) {
     run.player.onGround = false;
 }
 
+static bool LevelUsesSubworlds(const LevelData& level) {
+    auto anyMulti = [](const auto& vec) {
+        for (const auto& o : vec) if (o.subworld >= 0) return true;
+        return false;
+        };
+    return anyMulti(level.platforms) || anyMulti(level.obstacles) ||
+        anyMulti(level.draggables) || anyMulti(level.switches) ||
+        anyMulti(level.doors) || anyMulti(level.pads) ||
+        anyMulti(level.mirrors) || anyMulti(level.emitters) ||
+        anyMulti(level.receivers);
+}
+
+
 // Genera una texture procedurale in stile "cassa di legno" (assi orizzontali
 // e rinforzi incrociati), su base quasi neutra cosi' che il tint per-cassa
 // (il colore scelto nell'editor) resti ben leggibile sopra il disegno.
@@ -1127,7 +1140,11 @@ int main() {
             }
 
             DrawText(TextFormat("Tempo: %s", FormatTime(run.elapsedTime).c_str()), 10, 102, 18, DARKGREEN);
-            DrawText(TextFormat("Mondo: %d / 4", run.currentSubworld + 1), 10, 124, 18, PURPLE);
+           float nextHudY = 124.0f;
+            if (LevelUsesSubworlds(currentLevel)) {
+                DrawText(TextFormat("Mondo: %d / 4", run.currentSubworld + 1), 10, 124, 18, PURPLE);
+                nextHudY = 146.0f;
+            }
             DrawText("ESC: torna indietro   |   R: ricomincia", 10, screenHeight - 26, 16, DARKGRAY);
 
             {
