@@ -35,6 +35,8 @@ struct SceneRenderState {
     // modalita' "Tutti i mondi"), 0-3 = mostra solo gli oggetti con quel
     // subworld piu' quelli condivisi (subworld == -1 sull'oggetto stesso).
     int subworld = -1;
+    int selectedIndex = -1;
+    int selectedType = -1;
 };
 
 // Stato "neutro" per mostrare un livello senza una partita in corso (usato
@@ -51,3 +53,5 @@ SceneRenderState MakeIdleSceneState(const LevelData& level);
 // disegnate come semplici cubi colorati invece che col modello testurizzato
 // usato dal gioco vero e proprio.
 void DrawLevelScene(const LevelData& level, const SceneRenderState& state, const Camera3D& camera, const Model* crateModel = nullptr);
+
+bool IsSelectedInEditor(const SceneRenderState& state, int objType, int objIndex);

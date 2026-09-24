@@ -1377,6 +1377,8 @@ void LevelEditor::DrawCanvas() {
 
         SceneRenderState rs = MakeIdleSceneState(working);
         rs.subworld = activeSubworld;
+        rs.selectedIndex = selIndex;
+        rs.selectedType = (selType == EditorSelType::NONE) ? -1 : (int)selType;
         rs.beams = ComputeLightBeams(working, rs.doorHeights, rs.draggablePositions, activeSubworld, rs.receiverLit);
         DrawLevelScene(working, rs, camera, nullptr);
 
@@ -1450,26 +1452,27 @@ void LevelEditor::DrawCanvas() {
             default: break;
         }
 
-        // Gizmo di traslazione (freccette X/Y/Z) sull'oggetto selezionato,
-        // solo con lo strumento Seleziona attivo.
-        if (tool == EditorTool::SELECT && selType != EditorSelType::NONE) {
-            Vector3 selPos;
-            if (GetSelectedPosition(selPos)) DrawGizmo(selPos);
-        }
+                // "Ghost" dell'oggetto selezionato: ridisegnato semitrasparente sopra
+        // la scena, cosi' il gizmo che segue risulta sempre visibile.
+        rlDrawRenderBatchActive();
+        DrawSelectedObjectGhost();
 
-        // Anteprima del box mentre si trascina per crearne uno nuovo
-        if (isDraggingNew && (tool == EditorTool::PLATFORM || tool == EditorTool::OBSTACLE || tool == EditorTool::DRAGGABLE)) {
-            Vector2 cur = ScreenToWorld(GetMousePosition());
-            cur.x = SnapToGrid(cur.x);
-            cur.y = SnapToGrid(cur.y);
-            float minX = std::min(dragStartWorld.x, cur.x), maxX = std::max(dragStartWorld.x, cur.x);
-            float minZ = std::min(dragStartWorld.y, cur.y), maxZ = std::max(dragStartWorld.y, cur.y);
-            float cx = (minX + maxX) / 2.0f, cz = (minZ + maxZ) / 2.0f;
-            float sx = std::max(0.2f, maxX - minX), sz = std::max(0.2f, maxZ - minZ);
-            float h = (tool == EditorTool::OBSTACLE) ? newObstacleHeight : 0.5f;
-            Vector3 c = { cx, newPlatformTopY + (tool == EditorTool::OBSTACLE ? h / 2.0f : -0.25f), cz };
-            Color previewColor = tool == EditorTool::PLATFORM ? DARKGREEN : (tool == EditorTool::OBSTACLE ? MAROON : ORANGE);
-            DrawCubeWires(c, sx, h, sz, previewColor);
+        // Gizmo SEMPRE visibile: disegnato per ultimo e con depth test spento,
+        // cosi' non viene mai coperto dagli oggetti della scena (pareti, casse,
+        // porte...) ne' dall'oggetto stesso su cui e' centrato.
+       if (tool == EditorTool::SELECT && selType != EditorSelType::NONE) {
+            Vector3 selPos;
+            if (GetSelectedPosition(selPos)) {
+                // Flush di tutto cio' che era pendente PRIMA di cambiare stato.
+                rlDrawRenderBatchActive();
+                rlDisableDepthTest();
+                DrawGizmo(selPos);
+                // CRUCIALE: flush MENTRE il depth test e' ancora spento.
+                // Senza questa riga, rlEnableDepthTest() riabilita il test
+                // prima che le frecce vengano renderizzate, e spariscono.
+                rlDrawRenderBatchActive();
+                rlEnableDepthTest();
+            }
         }
     EndMode3D();
 
@@ -1595,4 +1598,93 @@ void LevelEditor::Draw() {
 
     if (showSaveBox) DrawSaveDialog();
     if (showLoadBox) DrawLoadDialog();
+}
+
+void LevelEditor::DrawSelectedObjectGhost() {
+    if (selType == EditorSelType::NONE) return;
+
+    const float kGhostAlpha = 0.35f;  // quanto e' "sbiadito" l'oggetto selezionato
+
+    // Abilita blending e disabilita la scrittura nello Z-buffer: cosi' le
+    // facce dell'oggetto semitrasparente non si occludono tra loro in modo
+    // strano (senza questo, l'oggetto apparirebbe a chiazze).
+    rlDrawRenderBatchActive();
+    rlDisableDepthMask();
+    BeginBlendMode(BLEND_ALPHA);
+
+    auto ghostCube = [&](Vector3 center, Vector3 size, Color color) {
+        DrawCubeV(center, size, Fade(color, kGhostAlpha));
+    };
+
+    switch (selType) {
+        case EditorSelType::PLATFORM:
+            if (selIndex >= 0 && selIndex < (int)working.platforms.size()) {
+                auto& b = working.platforms[selIndex];
+                ghostCube(b.position, b.size, b.color);
+            }
+            break;
+        case EditorSelType::OBSTACLE:
+            if (selIndex >= 0 && selIndex < (int)working.obstacles.size()) {
+                auto& b = working.obstacles[selIndex];
+                ghostCube(b.position, b.size, b.color);
+            }
+            break;
+        case EditorSelType::DRAGGABLE:
+            if (selIndex >= 0 && selIndex < (int)working.draggables.size()) {
+                auto& b = working.draggables[selIndex];
+                ghostCube(b.position, b.size, b.color);
+            }
+            break;
+        case EditorSelType::SWITCH:
+            if (selIndex >= 0 && selIndex < (int)working.switches.size()) {
+                auto& s = working.switches[selIndex];
+                ghostCube(s.position, Vector3{ 1, 1, 1 }, s.color);
+            }
+            break;
+        case EditorSelType::DOOR:
+            if (selIndex >= 0 && selIndex < (int)working.doors.size()) {
+                auto& d = working.doors[selIndex];
+                Vector3 eff = GetDoorEffectiveSize(d);
+                Vector3 c = { d.position.x, d.position.y + eff.y / 2.0f, d.position.z };
+                ghostCube(c, eff, d.color);
+            }
+            break;
+        case EditorSelType::PAD:
+            if (selIndex >= 0 && selIndex < (int)working.pads.size()) {
+                auto& p = working.pads[selIndex];
+                ghostCube(p.position, p.size, p.color);
+            }
+            break;
+        case EditorSelType::MIRROR:
+            if (selIndex >= 0 && selIndex < (int)working.mirrors.size()) {
+                auto& m = working.mirrors[selIndex];
+                // Approssimazione: un cubo centrato sul pannello, va bene per
+                // l'effetto "ghost" (il pannello reale e' gia' disegnato sotto).
+                Vector3 size = { m.length, m.height, 0.15f };
+                ghostCube(m.position, size, m.color);
+            }
+            break;
+        case EditorSelType::EMITTER:
+            if (selIndex >= 0 && selIndex < (int)working.emitters.size()) {
+                auto& e = working.emitters[selIndex];
+                DrawSphere(e.position, 0.35f, Fade(e.color, kGhostAlpha));
+            }
+            break;
+        case EditorSelType::RECEIVER:
+            if (selIndex >= 0 && selIndex < (int)working.receivers.size()) {
+                auto& r = working.receivers[selIndex];
+                DrawSphere(r.position, r.radius, Fade(r.color, kGhostAlpha));
+            }
+            break;
+        case EditorSelType::START:
+            DrawSphere(working.playerStart, 0.35f, Fade(ORANGE, kGhostAlpha));
+            break;
+        case EditorSelType::EXIT:
+            DrawCylinder(working.exitPosition, working.exitRadius, working.exitRadius, 0.1f, 24, Fade(GREEN, kGhostAlpha));
+            break;
+        default: break;
+    }
+
+    EndBlendMode();
+    rlEnableDepthMask();
 }

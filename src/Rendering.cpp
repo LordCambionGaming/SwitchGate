@@ -1,6 +1,26 @@
 #include "Rendering.h"
 #include "raymath.h"
 
+
+enum EditorSelTypeInt {
+    ESEL_NONE = 0,
+    ESEL_PLATFORM = 1,
+    ESEL_OBSTACLE = 2,
+    ESEL_DRAGGABLE = 3,
+    ESEL_SWITCH = 4,
+    ESEL_START = 5,
+    ESEL_DOOR = 6,
+    ESEL_PAD = 7,
+    ESEL_MIRROR = 8,
+    ESEL_EMITTER = 9,
+    ESEL_RECEIVER = 10,
+    ESEL_EXIT = 11,
+};
+
+bool IsSelectedInEditor(const SceneRenderState& state, int objType, int objIndex) {
+    return state.selectedType == objType && state.selectedIndex == objIndex;
+}
+
 // Vero se l'oggetto va disegnato/e' tangibile nel sub-mondo attualmente
 // mostrato: objSubworld -1 = oggetto condiviso (sempre presente), stateSubworld
 // -1 = si sta mostrando "tutto" (modalita' editor), altrimenti devono combaciare.
@@ -40,14 +60,18 @@ SceneRenderState MakeIdleSceneState(const LevelData& level) {
 }
 
 void DrawLevelScene(const LevelData& level, const SceneRenderState& state, const Camera3D& camera, const Model* crateModel) {
-    for (const auto& p : level.platforms) {
+    for (size_t i = 0; i < level.platforms.size(); i++) {
+        const auto& p = level.platforms[i];
+        if (IsSelectedInEditor(state, ESEL_PLATFORM, (int)i)) continue;
         if (!InActiveSubworld(p.subworld, state.subworld)) continue;
         float radius = Vector3Length(Vector3Scale(p.size, 0.5f));
         if (!IsVisibleToCamera(camera, p.position, radius)) continue;
         DrawCube(p.position, p.size.x, p.size.y, p.size.z, p.color);
         DrawCubeWires(p.position, p.size.x, p.size.y, p.size.z, Fade(BLACK, 0.25f));
     }
-    for (const auto& o : level.obstacles) {
+    for (size_t i = 0; i < level.obstacles.size(); i++) {
+        const auto& o = level.obstacles[i];
+        if (IsSelectedInEditor(state, ESEL_OBSTACLE, (int)i)) continue;
         if (!InActiveSubworld(o.subworld, state.subworld)) continue;
         float radius = Vector3Length(Vector3Scale(o.size, 0.5f));
         if (!IsVisibleToCamera(camera, o.position, radius)) continue;
@@ -55,6 +79,7 @@ void DrawLevelScene(const LevelData& level, const SceneRenderState& state, const
         DrawCubeWires(o.position, o.size.x, o.size.y, o.size.z, DARKGRAY);
     }
     for (size_t i = 0; i < level.draggables.size(); i++) {
+        if (IsSelectedInEditor(state, ESEL_DRAGGABLE, (int)i)) continue;
         if (!InActiveSubworld(level.draggables[i].subworld, state.subworld)) continue;
         Vector3 dp = (i < state.draggablePositions.size()) ? state.draggablePositions[i] : level.draggables[i].position;
         Vector3 ds = level.draggables[i].size;
@@ -70,6 +95,7 @@ void DrawLevelScene(const LevelData& level, const SceneRenderState& state, const
 
     for (size_t i = 0; i < level.pads.size(); i++) {
         const LevelPad& pad = level.pads[i];
+        if (IsSelectedInEditor(state, ESEL_PAD, (int)i)) continue;
         if (!InActiveSubworld(pad.subworld, state.subworld)) continue;
         if (!IsVisibleToCamera(camera, pad.position, pad.size.x)) continue;
         bool pressed = (i < state.padPressed.size()) && state.padPressed[i];
@@ -80,6 +106,7 @@ void DrawLevelScene(const LevelData& level, const SceneRenderState& state, const
 
     for (size_t i = 0; i < level.switches.size(); i++) {
         const auto& s = level.switches[i];
+        if (IsSelectedInEditor(state, ESEL_SWITCH, (int)i)) continue;
         if (!InActiveSubworld(s.subworld, state.subworld)) continue;
         if (!IsVisibleToCamera(camera, s.position, 0.87f)) continue;
         bool activated = (i < state.switchActivated.size()) && state.switchActivated[i];
@@ -90,26 +117,22 @@ void DrawLevelScene(const LevelData& level, const SceneRenderState& state, const
 
     for (size_t i = 0; i < level.doors.size(); i++) {
         const auto& door = level.doors[i];
+        if (IsSelectedInEditor(state, ESEL_DOOR, (int)i)) continue;
         if (!InActiveSubworld(door.subworld, state.subworld)) continue;
         float h = (i < state.doorHeights.size()) ? state.doorHeights[i] : 0.0f;
         if (h <= 0.01f) continue;
         Vector3 effSize = GetDoorEffectiveSize(door);
-        // door.position.y e' la base (il "pavimento") della porta: la parte
-        // ancora visibile (che si ritira verso il basso mentre apre) parte da
-        // li' e si estende in alto di h. Prima si ignorava sempre
-        // door.position.y e si partiva da 0: spostare la porta in quota con
-        // il gizmo non aveva alcun effetto visibile.
         Vector3 dp = { door.position.x, door.position.y + h / 2.0f, door.position.z };
         DrawCube(dp, effSize.x, h, effSize.z, door.color);
         DrawCubeWires(dp, effSize.x, h, effSize.z, BLACK);
     }
 
-    for (const auto& mir : level.mirrors) {
+    for (size_t i = 0; i < level.mirrors.size(); i++) {
+        const auto& mir = level.mirrors[i];
+        if (IsSelectedInEditor(state, ESEL_MIRROR, (int)i)) continue;
         if (!InActiveSubworld(mir.subworld, state.subworld)) continue;
         if (!IsVisibleToCamera(camera, mir.position, mir.length)) continue;
         Vector3 mDir = DirFromAngleDeg(mir.angleDeg);
-        // Pannello sottile orientato lungo mDir: DrawCubeV non supporta la
-        // rotazione, quindi lo disegniamo "a mano" come due triangoli.
         Vector3 half = Vector3Scale(mDir, mir.length / 2.0f);
         Vector3 up = Vector3{ 0, mir.height / 2.0f, 0 };
         Vector3 a = Vector3Subtract(Vector3Subtract(mir.position, half), up);
@@ -124,7 +147,9 @@ void DrawLevelScene(const LevelData& level, const SceneRenderState& state, const
         DrawLine3D(c, d, DARKGRAY); DrawLine3D(d, a, DARKGRAY);
     }
 
-    for (const auto& em : level.emitters) {
+    for (size_t i = 0; i < level.emitters.size(); i++) {
+        const auto& em = level.emitters[i];
+        if (IsSelectedInEditor(state, ESEL_EMITTER, (int)i)) continue;
         if (!InActiveSubworld(em.subworld, state.subworld)) continue;
         if (!IsVisibleToCamera(camera, em.position, 0.5f)) continue;
         DrawSphere(em.position, 0.25f, em.color);
@@ -133,6 +158,7 @@ void DrawLevelScene(const LevelData& level, const SceneRenderState& state, const
 
     for (size_t i = 0; i < level.receivers.size(); i++) {
         const auto& rec = level.receivers[i];
+        if (IsSelectedInEditor(state, ESEL_RECEIVER, (int)i)) continue;
         if (!InActiveSubworld(rec.subworld, state.subworld)) continue;
         if (!IsVisibleToCamera(camera, rec.position, rec.radius + 0.3f)) continue;
         bool lit = (i < state.receiverLit.size()) && state.receiverLit[i];
@@ -141,9 +167,6 @@ void DrawLevelScene(const LevelData& level, const SceneRenderState& state, const
         DrawSphereWires(rec.position, rec.radius, 8, 8, DARKGRAY);
     }
 
-    // Il "nucleo" del fascio e' un sottile cilindro pieno (si vede bene da
-    // qualunque angolo, a differenza di una linea); il bagliore attorno e'
-    // un secondo cilindro piu' largo e trasparente.
     for (const auto& seg : state.beams) {
         if (Vector3DistanceSqr(seg.a, seg.b) < 0.0001f) continue;
         DrawCylinderEx(seg.a, seg.b, 0.12f, 0.12f, 6, Fade(seg.color, 0.25f));

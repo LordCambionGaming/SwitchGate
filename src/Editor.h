@@ -131,10 +131,11 @@ private:
     float ClosestTOnAxis(Ray ray, Vector3 axisOrigin, Vector3 axisDir) const;
 
     void DrawGizmo(Vector3 pos);
-
+    void DrawSelectedObjectGhost();
     void DrawTopBar();
     void DrawSidebar();
     void DrawCanvas();
     void DrawSaveDialog();
     void DrawLoadDialog();
+    
 };
