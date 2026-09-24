@@ -204,6 +204,7 @@ int main() {
     int rebindingIndex = -1;
     float settingsScroll = 0.0f;
     float helpScroll = 0.0f;
+    float levelSelectScroll = 0.0f;
 
     LevelManager levelManager;
     levelManager.ScanDirectory("levels");
@@ -691,9 +692,40 @@ int main() {
             const auto& levels = levelManager.GetLevels();
             const auto& errs = levelManager.GetErrors();
 
-            float listY = 110;
+
+            //area scorrevole
+             const float listTop = 100.0f;
+            const float listBottom = screenHeight - 100.0f;
+            Rectangle listVisibleRect = { 0, listTop, (float)screenWidth, listBottom - listTop };
+
+            // Rotella del mouse: scorre solo se il cursore e' sopra l'area della lista.
+            if (CheckCollisionPointRec(GetMousePosition(), listVisibleRect)) {
+                levelSelectScroll -= GetMouseWheelMove() * 30.0f;
+            }
+
+            if (levelSelectScroll < 0.0f)levelSelectScroll = 0.0f;
+
+            // Altezza totale dei contenuti (le card + eventuali errori sotto).
+            const float cardHeight = 64.0f;
+            const float cardSpacing = 74.0f;
+            float contentHeight = (float)levels.size() * cardSpacing;
+            if (levels.empty())contentHeight += 40.0f;//riga - nessun livello trovato
+            contentHeight += (float)errs.size() * 20.0f + 40.0f;//eventuali errori
+
+            float maxScroll = std::max(0.0f, contentHeight - (listBottom - listTop));
+            if (levelSelectScroll > maxScroll) levelSelectScroll = maxScroll;
+
+
+            // Disegno della lista con clipping e traslazione verticale.
+            g_uiScrollOffsetY = levelSelectScroll;
+            BeginScissorMode((int)listVisibleRect.x, (int)listVisibleRect.y,
+                     (int)listVisibleRect.width, (int)listVisibleRect.height);
+            rlPushMatrix();
+            rlTranslatef(0, -levelSelectScroll, 0);
+
+            float listY = listTop + 10.0f;
             for (int i = 0; i < (int)levels.size(); i++) {
-                Rectangle card = { 40, listY, screenWidth - 80.0f, 64 };
+                Rectangle card = { 40, listY, screenWidth - 80.0f, cardHeight  };
                 bool isSel = (selectedLevel == i);
                 Color base = isSel ? Fade(DARKGREEN, 0.85f) : Fade(LIGHTGRAY, 0.9f);
                 Color hover = isSel ? DARKGREEN : Fade(SKYBLUE, 0.9f);
@@ -714,16 +746,31 @@ int main() {
                     DrawText(recordText.c_str(), (int)(screenWidth - 60 - rtw), (int)(listY + 22), 14,
                               isSel ? GOLD : DARKGREEN);
                 }
-                listY += 74;
+                listY += cardSpacing;
             }
 
             if (levels.empty()) {
                 DrawText("Nessun livello trovato nella cartella 'levels'.", 40, (int)listY + 10, 20, MAROON);
+                listY += 40.0f;
             }
             for (size_t i = 0; i < errs.size(); i++) {
                 DrawText(errs[i].c_str(), 40, (int)(listY + 10 + i * 20), 14, MAROON);
             }
 
+            rlPopMatrix();
+            EndScissorMode();
+            g_uiScrollOffsetY = 0.0f;
+
+            // Scrollbar visibile solo se il contenuto eccede l'area.
+            if (maxScroll > 0.0f) {
+                Rectangle track = { screenWidth - 20.0f, listTop, 6, listBottom - listTop };
+                DrawRectangleRec(track, Fade(LIGHTGRAY, 0.6f));
+                float thumbH = std::max(24.0f, track.height * (track.height / contentHeight));
+                float thumbY = track.y + (track.height - thumbH) * (levelSelectScroll / maxScroll);
+                DrawRectangleRec(Rectangle{ track.x, thumbY, track.width, thumbH }, DARKGRAY);
+            }
+
+            //pulsanti fissi in basso
             Rectangle backBtn = { 40, screenHeight - 80.0f, 200, 50 };
             Rectangle refreshBtn = { 260, screenHeight - 80.0f, 200, 50 };
             Rectangle startBtn = { screenWidth - 260.0f, screenHeight - 80.0f, 220, 50 };
@@ -734,6 +781,7 @@ int main() {
             if (DrawButton(refreshBtn, "AGGIORNA ELENCO", 18, DARKBLUE, BLUE, WHITE)) {
                 levelManager.ScanDirectory("levels");
                 if (selectedLevel >= (int)levelManager.GetLevels().size()) selectedLevel = -1;
+                levelSelectScroll = 0.0f;
             }
             bool canStart = selectedLevel >= 0 && selectedLevel < (int)levels.size();
             if (canStart && DrawButton(startBtn, "GIOCA", 22, DARKGREEN, GREEN, WHITE)) {
