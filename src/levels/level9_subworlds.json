@@ -1,0 +1,150 @@
+{
+  "description": "Sei sempre nello stesso posto. Ruota la camera per cambiare realta'. Ogni mondo ha una rampa diversa: usale tutte per arrivare in cima.",
+  "doors": [
+    {
+      "color": "darkbrown",
+      "linked_switch": -1,
+      "linked_switches": [
+        0
+      ],
+      "logic_op": "OR",
+      "position": [
+        0.0,
+        0.0,
+        5.0
+      ],
+      "rotated": false,
+      "size": [
+        3.0,
+        3.0,
+        0.5
+      ],
+      "subworld": -1
+    }
+  ],
+  "draggables": [],
+  "emitters": [],
+  "exit": {
+    "position": [
+      0.0,
+      0.0,
+      6.0
+    ],
+    "radius": 1.0
+  },
+  "fall_reset_y": -12.0,
+  "gravity": true,
+  "mirrors": [],
+  "name": "La Torre che Cambia",
+  "obstacles": [
+    {
+      "color": "blue",
+      "position": [
+        1.0,
+        2.25,
+        -4.0
+      ],
+      "size": [
+        0.5,
+        4.5,
+        3.5
+      ],
+      "subworld": 0
+    }
+  ],
+  "pads": [],
+  "platforms": [
+    {
+      "color": "lightgray",
+      "position": [
+        0.0,
+        -0.0,
+        0.0
+      ],
+      "size": [
+        10.0,
+        0.5,
+        10.0
+      ],
+      "subworld": -1
+    },
+    {
+      "color": "skyblue",
+      "position": [
+        3.0,
+        1.0,
+        0.0
+      ],
+      "size": [
+        4.0,
+        0.5,
+        4.0
+      ],
+      "subworld": 0
+    },
+    {
+      "color": "skyblue",
+      "position": [
+        3.0,
+        2.0,
+        -4.0
+      ],
+      "size": [
+        3.0,
+        0.5,
+        3.0
+      ],
+      "subworld": 0
+    },
+    {
+      "color": "red",
+      "position": [
+        -1.0,
+        2.0,
+        -4.0
+      ],
+      "size": [
+        3.0,
+        0.5,
+        3.0
+      ],
+      "subworld": 1
+    },
+    {
+      "color": "red",
+      "position": [
+        -4.0,
+        3.0,
+        -4.0
+      ],
+      "size": [
+        2.0,
+        0.5,
+        3.0
+      ],
+      "subworld": 1
+    }
+  ],
+  "player_start": [
+    0.0,
+    1.0,
+    0.0
+  ],
+  "random_sequence": false,
+  "receivers": [],
+  "sequence": [
+    0
+  ],
+  "switches": [
+    {
+      "color": "red",
+      "name": "ROSSO",
+      "position": [
+        -4.0,
+        4.0,
+        -4.0
+      ],
+      "subworld": 1
+    }
+  ]
+}

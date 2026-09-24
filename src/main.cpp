@@ -61,7 +61,7 @@ struct RunState {
     std::vector<bool> receiverLit;
     std::vector<LightBeamSegment> beams;
 
-    // Angolo ATTUALE di ogni specchio durante la partita: il giocatore puo'
+    // Angolo attuale di ogni specchio durante la partita: il giocatore puo'
     // ruotarli con Q/E per indirizzare il laser (vedi sotto). Parte sempre
     // dall'angolo configurato nel livello (currentLevel.mirrors non viene
     // mai modificato), cosi' "Ricomincia livello" li riporta all'originale.
@@ -349,7 +349,7 @@ int main() {
                 float overlapX = (crateSize.x / 2.0f + run.player.radius) - fabsf(dx);
                 float overlapZ = (crateSize.z / 2.0f + run.player.radius) - fabsf(dz);
 
-                // Il push va applicato SOLO se il giocatore si sovrappone anche
+                // Il push va applicato solo se il giocatore si sovrappone anche
                 // in verticale alla cassa: senza questo controllo, saltando
                 // sopra una cassa (es. scavalcando un muro) la si spingeva lo
                 // stesso solo perche' orizzontalmente vicina, anche a mezz'aria
@@ -662,6 +662,11 @@ int main() {
 
             if (DrawButton(playBtn, "GIOCA", 26, Fade(DARKBLUE, 0.85f), DARKBLUE, WHITE)) {
                 levelManager.ScanDirectory("levels");
+                // Reset della selezione e dello scroll quando si entra nella
+                // lista: cosi' non ci si porta dietro uno selectedLevel vecchio
+                // da una sessione precedente, ne' uno scroll "sporco".
+                selectedLevel = -1;
+                levelSelectScroll = 0.0f;
                 state = GameState::LEVEL_SELECT;
             }
             if (DrawButton(editorBtn, "EDITOR LIVELLI", 22, Fade(DARKGREEN, 0.85f), DARKGREEN, WHITE)) {
@@ -692,9 +697,12 @@ int main() {
             const auto& levels = levelManager.GetLevels();
             const auto& errs = levelManager.GetErrors();
 
-
-            //area scorrevole
-             const float listTop = 100.0f;
+            // Area scorrevole della lista livelli 
+            // Lo scroll e' applicato direttamente alle
+            // coordinate visive (y_screen = y_logica - scroll). 
+            // no rlTranslatef qui, perche' altrimenti lo scroll verrebbe applicato
+            // due volte e il click risulterebbe sfasato rispetto a cio' che si vede.
+            const float listTop = 100.0f;
             const float listBottom = screenHeight - 100.0f;
             Rectangle listVisibleRect = { 0, listTop, (float)screenWidth, listBottom - listTop };
 
@@ -702,40 +710,72 @@ int main() {
             if (CheckCollisionPointRec(GetMousePosition(), listVisibleRect)) {
                 levelSelectScroll -= GetMouseWheelMove() * 30.0f;
             }
+            if (levelSelectScroll < 0.0f) levelSelectScroll = 0.0f;
 
-            if (levelSelectScroll < 0.0f)levelSelectScroll = 0.0f;
-
-            // Altezza totale dei contenuti (le card + eventuali errori sotto).
             const float cardHeight = 64.0f;
             const float cardSpacing = 74.0f;
             float contentHeight = (float)levels.size() * cardSpacing;
-            if (levels.empty())contentHeight += 40.0f;//riga - nessun livello trovato
-            contentHeight += (float)errs.size() * 20.0f + 40.0f;//eventuali errori
+            if (levels.empty()) contentHeight += 40.0f;
+            contentHeight += (float)errs.size() * 20.0f + 40.0f;
 
             float maxScroll = std::max(0.0f, contentHeight - (listBottom - listTop));
             if (levelSelectScroll > maxScroll) levelSelectScroll = maxScroll;
 
+            // input: letto 1 volta per frame, fuori dal loop di disegno 
+            // Se lo leggessimo dentro il loop, ogni card sotto il mouse
+            // riceverebbe lo stesso click e l'ultima del loop (quella piu' in
+            // basso, magari clippata e invisibile) vincerebbe.
+            const bool clickedThisFrame = IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+            const Vector2 mouse = GetMousePosition();
+            int clickedIndex = -1;   // -1 = nessuna card cliccata questo frame
 
-            // Disegno della lista con clipping e traslazione verticale.
-            g_uiScrollOffsetY = levelSelectScroll;
+            // Disegno della lista: niente rlTranslatef, ogni coordinata e'
+            // gia' quella visiva sullo schermo.
             BeginScissorMode((int)listVisibleRect.x, (int)listVisibleRect.y,
-                     (int)listVisibleRect.width, (int)listVisibleRect.height);
-            rlPushMatrix();
-            rlTranslatef(0, -levelSelectScroll, 0);
+                             (int)listVisibleRect.width, (int)listVisibleRect.height);
 
             float listY = listTop + 10.0f;
+
             for (int i = 0; i < (int)levels.size(); i++) {
-                Rectangle card = { 40, listY, screenWidth - 80.0f, cardHeight  };
-                bool isSel = (selectedLevel == i);
-                Color base = isSel ? Fade(DARKGREEN, 0.85f) : Fade(LIGHTGRAY, 0.9f);
-                Color hover = isSel ? DARKGREEN : Fade(SKYBLUE, 0.9f);
-                Color textCol = isSel ? WHITE : BLACK;
-                std::string label = TextFormat("%d.  %s", i + 1, levels[i].name.c_str());
-                if (DrawButton(card, label.c_str(), 22, base, hover, textCol)) {
-                    selectedLevel = i;
+                Rectangle cardScreen = { 40, listY - levelSelectScroll,
+                                         screenWidth - 80.0f, cardHeight };
+
+                // Salta le card completamente fuori dall'area visibile.
+                if (cardScreen.y + cardScreen.height < listVisibleRect.y) {
+                    listY += cardSpacing;
+                    continue;
                 }
+                if (cardScreen.y > listVisibleRect.y + listVisibleRect.height) break;
+
+                // Hit test solo sulla parte effettivamente visibile della card:
+                // intersechiamo il rettangolo della card con l'area visibile
+                // della lista. Senza questo, una card visibile per 1 pixel in
+                // fondo all'area avrebbe un'area di hover di 64 pixel (tutta
+                // la sua altezza), e un click sul bordo del pulsante GIOCA
+                // (che sta appena fuori dalla lista) la selezionerebbe.
+                Rectangle cardHoverArea = GetCollisionRec(cardScreen, listVisibleRect);
+
+                bool hover = CheckCollisionPointRec(mouse, cardHoverArea);
+                bool isSel = (selectedLevel == i);
+
+                // Registra il PRIMO click trovato (non l'ultimo).
+                if (hover && clickedThisFrame && clickedIndex == -1) {
+                    clickedIndex = i;
+                }
+
+                // Il disegno usa il rettangolo completo: la parte fuori
+                // dall'area visibile viene tagliata dallo scissor.
+                Color base = isSel ? Fade(DARKGREEN, 0.85f)
+                                   : (hover ? Fade(SKYBLUE, 0.9f) : Fade(LIGHTGRAY, 0.9f));
+                Color textCol = isSel ? WHITE : BLACK;
+                DrawRectangleRec(cardScreen, base);
+                DrawRectangleLinesEx(cardScreen, 1, DARKGRAY);
+
+                std::string label = TextFormat("%d.  %s", i + 1, levels[i].name.c_str());
+                DrawText(label.c_str(), (int)cardScreen.x + 16, (int)cardScreen.y + 10, 22, textCol);
                 if (!levels[i].description.empty()) {
-                    DrawText(levels[i].description.c_str(), 56, (int)(listY + 38), 14,
+                    DrawText(levels[i].description.c_str(),
+                              (int)cardScreen.x + 16, (int)cardScreen.y + 38, 14,
                               isSel ? Fade(WHITE, 0.9f) : DARKGRAY);
                 }
                 auto hsIt = highscores.find(levels[i].filePath);
@@ -743,23 +783,42 @@ int main() {
                     std::string recordText = "Record: " + FormatTime(hsIt->second.bestTime) +
                                               "  -  " + std::to_string(hsIt->second.bestScore) + " punti";
                     int rtw = MeasureText(recordText.c_str(), 14);
-                    DrawText(recordText.c_str(), (int)(screenWidth - 60 - rtw), (int)(listY + 22), 14,
-                              isSel ? GOLD : DARKGREEN);
+                    DrawText(recordText.c_str(), (int)(cardScreen.x + cardScreen.width - rtw - 20),
+                              (int)cardScreen.y + 22, 14, isSel ? GOLD : DARKGREEN);
                 }
+
                 listY += cardSpacing;
             }
 
             if (levels.empty()) {
-                DrawText("Nessun livello trovato nella cartella 'levels'.", 40, (int)listY + 10, 20, MAROON);
-                listY += 40.0f;
+                float yEmpty = listTop + 10.0f - levelSelectScroll;
+                if (yEmpty + 40.0f > listVisibleRect.y &&
+                    yEmpty < listVisibleRect.y + listVisibleRect.height) {
+                    DrawText("Nessun livello trovato nella cartella 'levels'.",
+                              40, (int)yEmpty, 20, MAROON);
+                }
             }
             for (size_t i = 0; i < errs.size(); i++) {
-                DrawText(errs[i].c_str(), 40, (int)(listY + 10 + i * 20), 14, MAROON);
+                float yErr = listTop + 10.0f - levelSelectScroll
+                           + (float)levels.size() * cardSpacing
+                           + (levels.empty() ? 40.0f : 0.0f)
+                           + 10.0f + (float)i * 20.0f;
+                if (yErr + 20.0f > listVisibleRect.y &&
+                    yErr < listVisibleRect.y + listVisibleRect.height) {
+                    DrawText(errs[i].c_str(), 40, (int)yErr, 14, MAROON);
+                }
             }
 
-            rlPopMatrix();
             EndScissorMode();
-            g_uiScrollOffsetY = 0.0f;
+
+            //  una sola volta, dopo il loop 
+            // Cosi' selectedLevel non puo' essere sovrascritto da una card
+            // successiva nello stesso frame.
+            if (clickedIndex >= 0) {
+                selectedLevel = clickedIndex;
+            }
+            // Nota: g_uiScrollOffsetY non viene usato qui: tutte le card sono
+            // disegnate a mano con coordinate visive esplicite.
 
             // Scrollbar visibile solo se il contenuto eccede l'area.
             if (maxScroll > 0.0f) {
@@ -1049,7 +1108,7 @@ int main() {
                 DrawText(hintText.c_str(), screenWidth / 2 - htw / 2, 120, 20, GOLD);
             }
 
-            // --- HUD ---
+            // HUD
             DrawText(currentLevel.name.c_str(), 10, 10, 22, DARKBLUE);
             DrawText("Muoviti con WASD, SPAZIO per saltare. Tocca un interruttore e premi E per attivarlo.",
                       10, 36, 16, DARKGRAY);
