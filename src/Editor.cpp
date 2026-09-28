@@ -226,6 +226,9 @@ void LevelEditor::PickAt() {
 
     considerSphere(working.playerStart, 0.6f, EditorSelType::START, -1);
     considerSphere(working.exitPosition, working.exitRadius + 0.2f, EditorSelType::EXIT, -1);
+    for (int i = 0; i < (int)working.teleporters.size(); i++)
+        if (inView(working.teleporters[i].subworld))
+            considerSphere(working.teleporters[i].from, working.teleporters[i].radius + 0.2f, EditorSelType::TELEPORTER, i);
 
     for (int i = 0; i < (int)working.doors.size(); i++) {
         if (!inView(working.doors[i].subworld)) continue;
@@ -284,6 +287,9 @@ bool LevelEditor::GetSelectedPosition(Vector3& outPos) const {
             outPos = working.playerStart; return true;
         case EditorSelType::EXIT:
             outPos = working.exitPosition; return true;
+        case EditorSelType::TELEPORTER:
+            if (selIndex >= 0 && selIndex < (int)working.teleporters.size()) { outPos = working.teleporters[selIndex].from; return true; }
+            break;
         default: break;
     }
     return false;
@@ -322,6 +328,9 @@ void LevelEditor::SetSelectedPosition(Vector3 pos) {
             working.playerStart = pos; break;
         case EditorSelType::EXIT:
             working.exitPosition = pos; break;
+        case EditorSelType::TELEPORTER:
+            if (selIndex >= 0 && selIndex < (int)working.teleporters.size()) working.teleporters[selIndex].from = pos;
+            break;
         default: break;
     }
 }
@@ -358,6 +367,9 @@ bool LevelEditor::GetSelectedSubworld(int& outSw) const {
         case EditorSelType::PLATFORM:
             if (selIndex >= 0 && selIndex < (int)working.platforms.size()) { outSw = working.platforms[selIndex].subworld; return true; }
             break;
+        case EditorSelType::TELEPORTER:
+            if (selIndex >= 0 && selIndex < (int)working.teleporters.size()) { outSw = working.teleporters[selIndex].subworld; return true; }
+            break;
         default: break;
     }
     return false;
@@ -391,6 +403,9 @@ void LevelEditor::SetSelectedSubworld(int sw) {
             break;
         case EditorSelType::PLATFORM:
             if (selIndex >= 0 && selIndex < (int)working.platforms.size()) working.platforms[selIndex].subworld = sw;
+            break;
+        case EditorSelType::TELEPORTER:
+            if (selIndex >= 0 && selIndex < (int)working.teleporters.size()) working.teleporters[selIndex].subworld = sw;
             break;
         default: break;
     }
@@ -476,6 +491,8 @@ void LevelEditor::DeleteSelected() {
             if (working.fixedSequence[k] > selIndex) working.fixedSequence[k]--;
             k++;
         }
+    } else if (selType == EditorSelType::TELEPORTER && selIndex >= 0 && selIndex < (int)working.teleporters.size()) {
+        working.teleporters.erase(working.teleporters.begin() + selIndex);
     } else {
         SetStatus("Questo oggetto non si puo' eliminare.", true);
         return;
@@ -567,6 +584,9 @@ void LevelEditor::Update() {
                         break;
                     case EditorSelType::START: ox = working.playerStart.x; oz = working.playerStart.z; break;
                     case EditorSelType::EXIT: ox = working.exitPosition.x; oz = working.exitPosition.z; break;
+                    case EditorSelType::TELEPORTER:
+                        if (selIndex >= 0) { ox = working.teleporters[selIndex].from.x; oz = working.teleporters[selIndex].from.z; }
+                        break;
                     case EditorSelType::DOOR:
                         if (selIndex >= 0) { ox = working.doors[selIndex].position.x; oz = working.doors[selIndex].position.z; }
                         break;
@@ -605,6 +625,9 @@ void LevelEditor::Update() {
                     break;
                 case EditorSelType::START: working.playerStart.x = nx; working.playerStart.z = nz; break;
                 case EditorSelType::EXIT: working.exitPosition.x = nx; working.exitPosition.z = nz; break;
+                case EditorSelType::TELEPORTER:
+                    if (selIndex >= 0) { working.teleporters[selIndex].from.x = nx; working.teleporters[selIndex].from.z = nz; }
+                    break;
                 case EditorSelType::DOOR:
                     if (selIndex >= 0) { working.doors[selIndex].position.x = nx; working.doors[selIndex].position.z = nz; }
                     break;
@@ -791,6 +814,19 @@ void LevelEditor::Update() {
             working.exitPosition.z = mw.y;
         }
     }
+    else if (tool == EditorTool::TELEPORTER) {
+        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && inCanvas) {
+            LevelTeleporter tp;
+            tp.from = Vector3{ mw.x, newPlatformTopY + 1.0f, mw.y };
+            tp.radius = 1.0f;
+            tp.to = tp.from; // di default coincide con "from": va spostata a mano col pannello "Destinazione"
+            tp.subworld = activeSubworld;
+            working.teleporters.push_back(tp);
+            selType = EditorSelType::TELEPORTER;
+            selIndex = (int)working.teleporters.size() - 1;
+            tool = EditorTool::SELECT;
+        }
+    }
 }
 
 
@@ -863,6 +899,7 @@ void LevelEditor::DrawSidebar() {
         { EditorTool::EMITTER, "Emettitore di luce" },
         { EditorTool::RECEIVER, "Ricevitore di luce" },
         { EditorTool::EXIT, "Uscita" },
+        { EditorTool::TELEPORTER, "Teletrasporto" },
     };
     for (auto& tb : tools) {
         Rectangle r = { x, y, w, 28 };
@@ -875,25 +912,44 @@ void LevelEditor::DrawSidebar() {
     }
 
     y += 6;
+    DrawText("NUMERO DI MONDI", (int)x, (int)y, 11, DARKGRAY); y += 15;
+    {
+        Rectangle m = { x, y, 28, 26 }, p = { x + w - 28, y, 28, 26 };
+        if (DrawMiniButton(m, "-", LIGHTGRAY, GRAY) && working.numSubworlds > 1) {
+            working.numSubworlds--;
+            if (activeSubworld >= working.numSubworlds) activeSubworld = -1;
+        }
+        if (DrawMiniButton(p, "+", LIGHTGRAY, GRAY) && working.numSubworlds < 12) working.numSubworlds++;
+        std::string val = std::to_string(working.numSubworlds);
+        DrawText(val.c_str(), (int)(x + w / 2 - MeasureText(val.c_str(), 18) / 2), (int)y + 3, 18, BLACK);
+        y += 32;
+    }
+
     DrawText("MONDO (visualizzato/costruito)", (int)x, (int)y, 11, DARKGRAY); y += 15;
     {
         // "Tutti" mostra e seleziona ogni oggetto, di qualunque mondo (utile
-        // per una visione d'insieme); scegliendo 1-4 si vedono e si piazzano
-        // solo gli oggetti di quel mondo piu' quelli condivisi.
-        struct WorldBtn { int sw; const char* label; };
-        WorldBtn worlds[] = { { -1, "Tutti" }, { 0, "1" }, { 1, "2" }, { 2, "3" }, { 3, "4" } };
-        float bw = (w - 4 * 4.0f) / 5.0f;
-        float bx = x;
-        for (auto& wb : worlds) {
-            Rectangle r = { bx, y, bw, 28 };
-            bool active = (activeSubworld == wb.sw);
-            if (DrawButton(r, wb.label, 13, active ? DARKGREEN : Fade(LIGHTGRAY, 0.9f), active ? GREEN : Fade(SKYBLUE, 0.7f), active ? WHITE : BLACK)) {
-                activeSubworld = wb.sw;
+        // per una visione d'insieme); scegliendo un numero si vedono e si
+        // piazzano solo gli oggetti di quel mondo piu' quelli condivisi.
+        // Il numero di pulsanti segue working.numSubworlds, su piu' righe se
+        // non ci stanno tutti in una.
+        const float btnW = 34.0f, btnGap = 4.0f;
+        int perRow = std::max(1, (int)((w + btnGap) / (btnW + btnGap)));
+        int totalButtons = working.numSubworlds + 1; // +1 per "Tutti"
+        float bx = x, by = y;
+        int col = 0;
+        for (int i = 0; i < totalButtons; i++) {
+            int sw = i - 1; // i=0 -> "Tutti" (-1), i=1 -> mondo 0, ecc.
+            std::string label = (sw == -1) ? "Tutti" : std::to_string(sw + 1);
+            Rectangle r = { bx, by, btnW, 28 };
+            bool active = (activeSubworld == sw);
+            if (DrawButton(r, label.c_str(), 12, active ? DARKGREEN : Fade(LIGHTGRAY, 0.9f), active ? GREEN : Fade(SKYBLUE, 0.7f), active ? WHITE : BLACK)) {
+                activeSubworld = sw;
                 ClearSelection();
             }
-            bx += bw + 4.0f;
+            col++;
+            if (col >= perRow) { col = 0; bx = x; by += 32.0f; } else { bx += btnW + btnGap; }
         }
-        y += 32;
+        y = by + ((col > 0) ? 32.0f : 0.0f);
     }
 
     y += 6;
@@ -1013,10 +1069,11 @@ void LevelEditor::DrawSidebar() {
             if (GetSelectedSubworld(curSw)) {
                 DrawText("Mondo di questo oggetto:", (int)x, (int)y, 11, DARKGRAY); y += 14;
                 Rectangle m = { x, y, 28, 26 }, p = { x + w - 28, y, 28, 26 };
-                if (DrawMiniButton(m, "<", LIGHTGRAY, GRAY)) SetSelectedSubworld(curSw <= -1 ? 3 : curSw - 1);
+                int maxSw = working.numSubworlds - 1;
+                if (DrawMiniButton(m, "<", LIGHTGRAY, GRAY)) SetSelectedSubworld(curSw <= -1 ? maxSw : curSw - 1);
                 std::string label = (curSw == -1) ? "Condiviso (tutti)" : ("Mondo " + std::to_string(curSw + 1));
                 DrawText(label.c_str(), (int)(x + w / 2 - MeasureText(label.c_str(), 14) / 2), (int)y + 5, 14, BLACK);
-                if (DrawMiniButton(p, ">", LIGHTGRAY, GRAY)) SetSelectedSubworld(curSw >= 3 ? -1 : curSw + 1);
+                if (DrawMiniButton(p, ">", LIGHTGRAY, GRAY)) SetSelectedSubworld(curSw >= maxSw ? -1 : curSw + 1);
                 y += 32;
             }
         }
@@ -1339,6 +1396,45 @@ void LevelEditor::DrawSidebar() {
             DrawText(s.c_str(), (int)x, (int)y, 11, DARKGRAY);
             y += 18;
         }
+        else if (selType == EditorSelType::TELEPORTER && selIndex >= 0 && selIndex < (int)working.teleporters.size()) {
+            LevelTeleporter& tp = working.teleporters[selIndex];
+            DrawText("Invisibile in partita: entrando nel raggio", (int)x, (int)y, 10, DARKGRAY); y += 13;
+            DrawText("di \"from\" si riappare a \"to\".", (int)x, (int)y, 10, DARKGRAY); y += 16;
+
+            DrawText("Raggio di attivazione:", (int)x, (int)y, 11, DARKGRAY); y += 14;
+            { Rectangle m = { x, y, 28, 24 }, p = { x + w - 28, y, 28, 24 };
+              if (DrawMiniButton(m, "-", LIGHTGRAY, GRAY)) tp.radius = std::max(0.3f, tp.radius - 0.25f);
+              if (DrawMiniButton(p, "+", LIGHTGRAY, GRAY)) tp.radius += 0.25f;
+              std::string s = TextFormat("%.2f", tp.radius);
+              DrawText(s.c_str(), (int)(x + w / 2 - MeasureText(s.c_str(), 16) / 2), (int)y + 3, 16, BLACK);
+              y += 28; }
+
+            DrawText("Destinazione (\"to\"):", (int)x, (int)y, 11, DARKGRAY); y += 14;
+            {
+                struct AxisRow { const char* label; float* val; };
+                AxisRow rows[] = { { "X:", &tp.to.x }, { "Y:", &tp.to.y }, { "Z:", &tp.to.z } };
+                for (auto& row : rows) {
+                    DrawText(row.label, (int)x, (int)y + 5, 12, DARKGRAY);
+                    Rectangle m = { x + 22, y, 26, 24 }, p = { x + w - 26, y, 26, 24 };
+                    if (DrawMiniButton(m, "-", LIGHTGRAY, GRAY)) *row.val -= 0.5f;
+                    if (DrawMiniButton(p, "+", LIGHTGRAY, GRAY)) *row.val += 0.5f;
+                    std::string s = TextFormat("%.1f", *row.val);
+                    DrawText(s.c_str(), (int)(x + w / 2 - MeasureText(s.c_str(), 15) / 2), (int)y + 4, 15, BLACK);
+                    y += 26;
+                }
+            }
+            {
+                Rectangle here = { x, y, w, 26 };
+                if (DrawButton(here, "Destinazione = dove sono ora", 12, DARKBLUE, BLUE, WHITE)) {
+                    tp.to = Vector3{ camTarget.x, camTarget.y, camTarget.z };
+                }
+                y += 30;
+            }
+
+            Rectangle del = { x, y, w, 26 };
+            if (DrawButton(del, "ELIMINA", 13, MAROON, RED, WHITE)) DeleteSelected();
+            y += 30;
+        }
     }
 
     y += 10;
@@ -1391,6 +1487,18 @@ void LevelEditor::DrawCanvas() {
             DrawCylinderWires(basePos, 0.5f, 0.5f, 0.04f, 16, ORANGE);
             DrawLine3D(Vector3{ working.playerStart.x, 0.0f, working.playerStart.z }, working.playerStart, DARKGRAY);
             DrawSphere(working.playerStart, 0.3f, ORANGE);
+        }
+
+        // Marcatore dei teletrasporti: invisibili in partita (l'illusione
+        // richiede che non si veda nulla), ma nell'editor vanno pur visti per
+        // poterli piazzare. "from" in viola, "to" in violaco piu' chiaro,
+        // collegati da una linea tratteggiata-simulata (segmenti alternati).
+        for (size_t i = 0; i < working.teleporters.size(); i++) {
+            const auto& tp = working.teleporters[i];
+            DrawSphereWires(tp.from, tp.radius, 10, 10, PURPLE);
+            DrawSphere(tp.from, 0.15f, PURPLE);
+            DrawSphere(tp.to, 0.15f, Fade(PURPLE, 0.5f));
+            DrawLine3D(tp.from, tp.to, Fade(PURPLE, 0.6f));
         }
 
         // Contorno dorato sull'oggetto selezionato
@@ -1448,6 +1556,12 @@ void LevelEditor::DrawCanvas() {
                 break;
             case EditorSelType::EXIT:
                 DrawCircle3D(working.exitPosition, working.exitRadius + 0.15f, Vector3{ 1, 0, 0 }, 90.0f, GOLD);
+                break;
+            case EditorSelType::TELEPORTER:
+                if (selIndex >= 0 && selIndex < (int)working.teleporters.size()) {
+                    DrawSphereWires(working.teleporters[selIndex].from, working.teleporters[selIndex].radius + 0.1f, 10, 10, GOLD);
+                    DrawSphereWires(working.teleporters[selIndex].to, 0.3f, 8, 8, GOLD);
+                }
                 break;
             default: break;
         }

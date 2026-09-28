@@ -6,6 +6,12 @@ const float GRAVITY = -24.0f;
 const float JUMP_SPEED = 9.0f;
 const float MOVE_SPEED = 6.0f;
 
+// Quanto si puo' "salire" camminando, senza saltare (una piccola gradinata,
+// un bordo leggermente rialzato...). Sotto questa soglia FindGroundY segue
+// il dislivello come una rampa; sopra, ResolvePlatformWalls tratta il bordo
+// della piattaforma come un muro vero, da scavalcare saltando.
+const float STEP_HEIGHT = 0.55f;
+
 bool FindGroundY(const LevelData& level, float x, float z, float maxY, int subworld, float& outY) {
     bool found = false;
     float best = -1e9f;
@@ -120,6 +126,28 @@ void ResolveObstacles(Vector3& pos, float radius, const std::vector<LevelBox>& o
     }
 }
 
+// Le piattaforme finora collidevano solo dall'alto/dal basso (FindGroundY /
+// FindCeilingY): di lato non bloccavano affatto, quindi ci si poteva
+// infilare dentro camminando contro il bordo di una piattaforma rialzata.
+// Qui si tratta come un vero muro SOLO la parte del bordo che sta sopra
+// STEP_HEIGHT rispetto ai piedi attuali: la parte piu' bassa (un gradino,
+// un bordo leggero) resta "rampabile" e la gestisce gia' FindGroundY,
+// quindi non va bloccata anche qui o si resterebbe incastrati contro il
+// primo gradino di ogni scala.
+void ResolvePlatformWalls(Vector3& pos, float radius, const std::vector<LevelBox>& platforms, int subworld) {
+    float climbableBottom = pos.y - radius + STEP_HEIGHT;
+    for (const auto& p : platforms) {
+        if (p.subworld != -1 && p.subworld != subworld) continue;
+        float top = p.position.y + p.size.y / 2.0f;
+        float bottom = p.position.y - p.size.y / 2.0f;
+        float effectiveBottom = std::max(bottom, climbableBottom);
+        if (effectiveBottom >= top) continue; // e' solo un gradino/bordo basso: niente muro, si sale camminando
+        Vector3 boxPos = { p.position.x, (effectiveBottom + top) / 2.0f, p.position.z };
+        Vector3 boxSize = { p.size.x, top - effectiveBottom, p.size.z };
+        ResolveBoxCollision(pos, radius, boxPos, boxSize);
+    }
+}
+
 void ResolveDoors(Vector3& pos, float radius, const std::vector<LevelDoor>& doors, const std::vector<float>& doorHeights, int subworld) {
     for (size_t i = 0; i < doors.size(); i++) {
         if (doors[i].subworld != -1 && doors[i].subworld != subworld) continue;
@@ -142,8 +170,19 @@ void UpdatePlayerPhysics(Player& player, const LevelData& level, const std::vect
     }
     ResolveObstacles(player.position, player.radius, level.obstacles, subworld);
     ResolveDoors(player.position, player.radius, level.doors, doorHeights, subworld);
-    player.position.x = Clamp(player.position.x, -19.5f, 19.5f);
-    player.position.z = Clamp(player.position.z, -19.5f, 19.5f);
+    ResolvePlatformWalls(player.position, player.radius, level.platforms, subworld);
+    if (level.wraparound) {
+        // "Mondo avvolgente": superato il bordo si rientra istantaneamente
+        // dal lato opposto (stile Pac-Man), invece di essere bloccati li'.
+        float b = level.wrapBound;
+        if (player.position.x > b) player.position.x -= 2.0f * b;
+        else if (player.position.x < -b) player.position.x += 2.0f * b;
+        if (player.position.z > b) player.position.z -= 2.0f * b;
+        else if (player.position.z < -b) player.position.z += 2.0f * b;
+    } else {
+        player.position.x = Clamp(player.position.x, -19.5f, 19.5f);
+        player.position.z = Clamp(player.position.z, -19.5f, 19.5f);
+    }
 
     // Quota dei piedi e della testa PRIMA di applicare la gravita' di questo
     // frame: servono a limitare FindGroundY/FindCeilingY alle sole superfici
@@ -169,7 +208,7 @@ void UpdatePlayerPhysics(Player& player, const LevelData& level, const std::vect
     }
 
     float groundY;
-    bool hasGround = FindGroundY(level, player.position.x, player.position.z, prevFeetY + 0.05f, subworld, groundY);
+    bool hasGround = FindGroundY(level, player.position.x, player.position.z, prevFeetY + STEP_HEIGHT, subworld, groundY);
     float feetY = player.position.y - player.radius;
 
     if (hasGround && feetY <= groundY && player.velocity.y <= 0.0f) {

@@ -1,5 +1,7 @@
 #include "Rendering.h"
 #include "raymath.h"
+#include "rlgl.h"
+#include <algorithm>
 
 
 enum EditorSelTypeInt {
@@ -26,6 +28,37 @@ bool IsSelectedInEditor(const SceneRenderState& state, int objType, int objIndex
 // -1 = si sta mostrando "tutto" (modalita' editor), altrimenti devono combaciare.
 static bool InActiveSubworld(int objSubworld, int stateSubworld) {
     return stateSubworld == -1 || objSubworld == -1 || objSubworld == stateSubworld;
+}
+
+// Mentre e' sfumato per occlusione, un oggetto NON deve scrivere sul depth
+// buffer: altrimenti il giocatore (disegnato dopo) fallirebbe comunque il
+// depth test contro di lui e resterebbe invisibile, anche se visivamente
+// l'oggetto e' semitrasparente. Va usato solo per la porzione di frame in cui
+// quell'oggetto e' effettivamente disegnato.
+struct DepthWriteGuard {
+    bool disabled;
+    explicit DepthWriteGuard(bool disable) : disabled(disable) { if (disabled) rlDisableDepthMask(); }
+    ~DepthWriteGuard() { if (disabled) rlEnableDepthMask(); }
+};
+
+// Se l'oggetto sta esattamente tra la camera e il giocatore (lungo la linea
+// visuale), lo si disegna semitrasparente: altrimenti oggetti grandi vicini
+// alla camera (muri, piattaforme, porte...) potrebbero nascondere del tutto
+// il giocatore, rendendo difficile capire dove si trova.
+static float OcclusionAlpha(const SceneRenderState& state, const Camera3D& camera, Vector3 objPos, float objRadius) {
+    if (!state.showPlayer) return 1.0f;
+    Vector3 toPlayer = Vector3Subtract(state.playerPosition, camera.position);
+    float playerDist = Vector3Length(toPlayer);
+    if (playerDist < 0.01f) return 1.0f;
+    Vector3 dir = Vector3Scale(toPlayer, 1.0f / playerDist);
+    Vector3 toObj = Vector3Subtract(objPos, camera.position);
+    float t = Vector3DotProduct(toObj, dir);
+    // Troppo vicino alla camera o al giocatore stesso: non serve sfumarlo.
+    if (t <= 0.5f || t >= playerDist - 0.4f) return 1.0f;
+    Vector3 closest = Vector3Add(camera.position, Vector3Scale(dir, t));
+    float perpDist = Vector3Distance(objPos, closest);
+    if (perpDist > objRadius + 0.55f) return 1.0f;
+    return 0.32f;
 }
 
 bool IsVisibleToCamera(const Camera3D& camera, Vector3 objPos, float objRadius) {
@@ -66,7 +99,9 @@ void DrawLevelScene(const LevelData& level, const SceneRenderState& state, const
         if (!InActiveSubworld(p.subworld, state.subworld)) continue;
         float radius = Vector3Length(Vector3Scale(p.size, 0.5f));
         if (!IsVisibleToCamera(camera, p.position, radius)) continue;
-        DrawCube(p.position, p.size.x, p.size.y, p.size.z, p.color);
+        float pAlpha = OcclusionAlpha(state, camera, p.position, radius);
+        DepthWriteGuard pGuard(pAlpha < 1.0f);
+        DrawCube(p.position, p.size.x, p.size.y, p.size.z, Fade(p.color, pAlpha));
         DrawCubeWires(p.position, p.size.x, p.size.y, p.size.z, Fade(BLACK, 0.25f));
     }
     for (size_t i = 0; i < level.obstacles.size(); i++) {
@@ -75,7 +110,9 @@ void DrawLevelScene(const LevelData& level, const SceneRenderState& state, const
         if (!InActiveSubworld(o.subworld, state.subworld)) continue;
         float radius = Vector3Length(Vector3Scale(o.size, 0.5f));
         if (!IsVisibleToCamera(camera, o.position, radius)) continue;
-        DrawCube(o.position, o.size.x, o.size.y, o.size.z, o.color);
+        float oAlpha = OcclusionAlpha(state, camera, o.position, radius);
+        DepthWriteGuard oGuard(oAlpha < 1.0f);
+        DrawCube(o.position, o.size.x, o.size.y, o.size.z, Fade(o.color, oAlpha));
         DrawCubeWires(o.position, o.size.x, o.size.y, o.size.z, DARKGRAY);
     }
     for (size_t i = 0; i < level.draggables.size(); i++) {
@@ -85,10 +122,13 @@ void DrawLevelScene(const LevelData& level, const SceneRenderState& state, const
         Vector3 ds = level.draggables[i].size;
         float radius = Vector3Length(Vector3Scale(ds, 0.5f));
         if (!IsVisibleToCamera(camera, dp, radius)) continue;
+        float dAlpha = OcclusionAlpha(state, camera, dp, radius);
+        DepthWriteGuard dGuard(dAlpha < 1.0f);
+        Color dc = Fade(level.draggables[i].color, dAlpha);
         if (crateModel) {
-            DrawModelEx(*crateModel, dp, Vector3{ 0, 1, 0 }, 0.0f, ds, level.draggables[i].color);
+            DrawModelEx(*crateModel, dp, Vector3{ 0, 1, 0 }, 0.0f, ds, dc);
         } else {
-            DrawCube(dp, ds.x, ds.y, ds.z, level.draggables[i].color);
+            DrawCube(dp, ds.x, ds.y, ds.z, dc);
         }
         DrawCubeWires(dp, ds.x, ds.y, ds.z, BLACK);
     }
@@ -123,7 +163,9 @@ void DrawLevelScene(const LevelData& level, const SceneRenderState& state, const
         if (h <= 0.01f) continue;
         Vector3 effSize = GetDoorEffectiveSize(door);
         Vector3 dp = { door.position.x, door.position.y + h / 2.0f, door.position.z };
-        DrawCube(dp, effSize.x, h, effSize.z, door.color);
+        float drAlpha = OcclusionAlpha(state, camera, dp, std::max(effSize.x, effSize.z) / 2.0f);
+        DepthWriteGuard drGuard(drAlpha < 1.0f);
+        DrawCube(dp, effSize.x, h, effSize.z, Fade(door.color, drAlpha));
         DrawCubeWires(dp, effSize.x, h, effSize.z, BLACK);
     }
 
@@ -139,10 +181,13 @@ void DrawLevelScene(const LevelData& level, const SceneRenderState& state, const
         Vector3 b = Vector3Add(Vector3Subtract(mir.position, half), up);
         Vector3 c = Vector3Add(Vector3Add(mir.position, half), up);
         Vector3 d = Vector3Subtract(Vector3Add(mir.position, half), up);
-        DrawTriangle3D(a, b, c, mir.color);
-        DrawTriangle3D(a, c, d, mir.color);
-        DrawTriangle3D(a, c, b, mir.color);
-        DrawTriangle3D(a, d, c, mir.color);
+        float mAlpha = OcclusionAlpha(state, camera, mir.position, mir.length);
+        DepthWriteGuard mGuard(mAlpha < 1.0f);
+        Color mc = Fade(mir.color, mAlpha);
+        DrawTriangle3D(a, b, c, mc);
+        DrawTriangle3D(a, c, d, mc);
+        DrawTriangle3D(a, c, b, mc);
+        DrawTriangle3D(a, d, c, mc);
         DrawLine3D(a, b, DARKGRAY); DrawLine3D(b, c, DARKGRAY);
         DrawLine3D(c, d, DARKGRAY); DrawLine3D(d, a, DARKGRAY);
     }
@@ -177,7 +222,12 @@ void DrawLevelScene(const LevelData& level, const SceneRenderState& state, const
                   state.exitOpen ? GREEN : GRAY);
 
     if (state.showPlayer) {
+        // Il player deve restare SEMPRE visibile, qualunque cosa lo copra:
+        // niente depth test per il suo disegno, cosi' non dipende dal fatto
+        // che l'oggetto davanti sia stato sfumato per occlusione o meno.
+        rlDisableDepthTest();
         DrawSphere(state.playerPosition, state.playerRadius, ORANGE);
         DrawSphereWires(state.playerPosition, state.playerRadius, 8, 8, MAROON);
+        rlEnableDepthTest();
     }
 }

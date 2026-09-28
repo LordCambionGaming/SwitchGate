@@ -15,6 +15,7 @@ struct Player {
 extern const float GRAVITY;
 extern const float JUMP_SPEED;
 extern const float MOVE_SPEED;
+extern const float STEP_HEIGHT;
 
 // Trova la quota della superficie di appoggio piu' alta sotto un punto (x, z),
 // considerando solo le piattaforme il cui bordo superiore non supera maxY.
@@ -42,6 +43,12 @@ void ResolveBoxCollision(Vector3& pos, float radius, Vector3 boxPos, Vector3 box
 void ResolveBoxToBoxCollision(Vector3& posA, Vector3 sizeA, Vector3& posB, Vector3 sizeB);
 
 void ResolveObstacles(Vector3& pos, float radius, const std::vector<LevelBox>& obstacles, int subworld);
+
+// Tratta come un muro vero la parte del bordo di una piattaforma che sta
+// sopra STEP_HEIGHT rispetto ai piedi attuali (la parte piu' bassa resta
+// "rampabile" e la gestisce FindGroundY). Va chiamata insieme a
+// ResolveObstacles/ResolveDoors nella risoluzione orizzontale.
+void ResolvePlatformWalls(Vector3& pos, float radius, const std::vector<LevelBox>& platforms, int subworld);
 
 // Una porta blocca il passaggio solo mentre non e' (quasi) del tutto aperta;
 // l'altezza attuale viene dall'animazione della partita in corso, non dal

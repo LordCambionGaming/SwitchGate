@@ -32,6 +32,9 @@ bool LevelManager::LoadFromFile(const std::string& path, LevelData& out, std::st
         if (j.contains("player_start")) lvl.playerStart = ParseVec3(j["player_start"], lvl.playerStart);
         if (j.contains("gravity")) lvl.gravityEnabled = j["gravity"].get<bool>();
         if (j.contains("fall_reset_y")) lvl.fallResetY = j["fall_reset_y"].get<float>();
+        if (j.contains("wraparound")) lvl.wraparound = j["wraparound"].get<bool>();
+        if (j.contains("wrap_bound")) lvl.wrapBound = j["wrap_bound"].get<float>();
+        if (j.contains("num_subworlds")) lvl.numSubworlds = std::max(1, j["num_subworlds"].get<int>());
 
         // Ogni tipo di oggetto sa leggere la propria chiave dal JSON radice.
         lvl.switches = ParseSwitchesField(j);
@@ -39,6 +42,7 @@ bool LevelManager::LoadFromFile(const std::string& path, LevelData& out, std::st
         lvl.mirrors = ParseMirrorsField(j);
         lvl.emitters = ParseEmittersField(j);
         lvl.receivers = ParseReceiversField(j);
+        lvl.teleporters = ParseTeleportersField(j);
         lvl.doors = ParseDoorsField(j);
 
         if (j.contains("random_sequence")) lvl.randomSequence = j["random_sequence"].get<bool>();
@@ -92,6 +96,9 @@ bool LevelManager::SaveToFile(const std::string& path, const LevelData& level, s
     j["player_start"] = Vec3ToJson(level.playerStart);
     j["gravity"] = level.gravityEnabled;
     j["fall_reset_y"] = level.fallResetY;
+    j["wraparound"] = level.wraparound;
+    j["wrap_bound"] = level.wrapBound;
+    j["num_subworlds"] = level.numSubworlds;
 
     j["switches"] = SwitchesToJson(level.switches);
 
@@ -106,6 +113,7 @@ bool LevelManager::SaveToFile(const std::string& path, const LevelData& level, s
     j["mirrors"] = MirrorsToJson(level.mirrors);
     j["emitters"] = EmittersToJson(level.emitters);
     j["receivers"] = ReceiversToJson(level.receivers);
+    j["teleporters"] = TeleportersToJson(level.teleporters);
 
     j["doors"] = DoorsToJson(level.doors);
     j["exit"] = { { "position", Vec3ToJson(level.exitPosition) }, { "radius", level.exitRadius } };

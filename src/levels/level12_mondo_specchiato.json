@@ -1,0 +1,214 @@
+{
+  "description": "Il corridoio rosa e quello azzurro si bloccano a turno da un mondo all'altro. Interruttore rosso: raggiungibile nel Mondo 1 (quello di partenza). Interruttore blu: gira la camera una volta per entrare nel Mondo 2, dove appare il passaggio azzurro. Attivali entrambi per aprire la porta.",
+  "name": "Livello 12 - Mondo Specchiato",
+  "player_start": [
+    0.0,
+    1.0,
+    4.5
+  ],
+  "gravity": true,
+  "random_sequence": true,
+  "fall_reset_y": -8.0,
+  "switches": [
+    {
+      "color": "red",
+      "position": [
+        -3.0,
+        0.5,
+        -2.0
+      ],
+      "name": "ROSSO",
+      "subworld": -1
+    },
+    {
+      "color": "blue",
+      "position": [
+        3.0,
+        0.5,
+        -2.0
+      ],
+      "name": "BLU",
+      "subworld": -1
+    }
+  ],
+  "doors": [
+    {
+      "color": "darkbrown",
+      "linked_switch": -1,
+      "linked_switches": [
+        0,
+        1
+      ],
+      "logic_op": "AND",
+      "position": [
+        0.0,
+        0.0,
+        -6.0
+      ],
+      "rotated": false,
+      "size": [
+        3.0,
+        3.0,
+        0.5
+      ],
+      "subworld": -1
+    }
+  ],
+  "exit": {
+    "position": [
+      0.0,
+      0.0,
+      -7.0
+    ],
+    "radius": 1.2
+  },
+  "obstacles": [
+    {
+      "color": "darkgray",
+      "position": [
+        -3.0,
+        1.5,
+        0.0
+      ],
+      "size": [
+        2.4,
+        3.0,
+        1.5
+      ],
+      "subworld": 1
+    },
+    {
+      "color": "darkgray",
+      "position": [
+        -3.0,
+        1.5,
+        0.0
+      ],
+      "size": [
+        2.4,
+        3.0,
+        1.5
+      ],
+      "subworld": 2
+    },
+    {
+      "color": "darkgray",
+      "position": [
+        -3.0,
+        1.5,
+        0.0
+      ],
+      "size": [
+        2.4,
+        3.0,
+        1.5
+      ],
+      "subworld": 3
+    },
+    {
+      "color": "darkgray",
+      "position": [
+        3.0,
+        1.5,
+        0.0
+      ],
+      "size": [
+        2.4,
+        3.0,
+        1.5
+      ],
+      "subworld": 0
+    },
+    {
+      "color": "darkgray",
+      "position": [
+        3.0,
+        1.5,
+        0.0
+      ],
+      "size": [
+        2.4,
+        3.0,
+        1.5
+      ],
+      "subworld": 2
+    },
+    {
+      "color": "darkgray",
+      "position": [
+        3.0,
+        1.5,
+        0.0
+      ],
+      "size": [
+        2.4,
+        3.0,
+        1.5
+      ],
+      "subworld": 3
+    }
+  ],
+  "pads": [],
+  "draggables": [],
+  "mirrors": [],
+  "emitters": [],
+  "receivers": [],
+  "platforms": [
+    {
+      "color": "lightgray",
+      "position": [
+        0.0,
+        -0.25,
+        4.0
+      ],
+      "size": [
+        6.0,
+        0.5,
+        3.0
+      ],
+      "subworld": -1
+    },
+    {
+      "color": "pink",
+      "position": [
+        -3.0,
+        -0.25,
+        0.0
+      ],
+      "size": [
+        2.2,
+        0.5,
+        5.5
+      ],
+      "subworld": -1
+    },
+    {
+      "color": "skyblue",
+      "position": [
+        3.0,
+        -0.25,
+        0.0
+      ],
+      "size": [
+        2.2,
+        0.5,
+        5.5
+      ],
+      "subworld": -1
+    },
+    {
+      "color": "lightgray",
+      "position": [
+        0.0,
+        -0.25,
+        -5.0
+      ],
+      "size": [
+        6.0,
+        0.5,
+        6.0
+      ],
+      "subworld": -1
+    }
+  ]
+}

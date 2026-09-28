@@ -284,8 +284,9 @@ int main() {
             // sono gia' coerenti mentre la camera sta ancora ruotando verso di
             // esso, invece di restare "vecchi" per una frazione di secondo.
             {
+                int n = std::max(1, currentLevel.numSubworlds);
                 int q = (int)lroundf(run.targetCameraYaw / (PI / 2.0f));
-                run.currentSubworld = ((q % 4) + 4) % 4;
+                run.currentSubworld = ((q % n) + n) % n;
             }
 
             Vector3 camForward = { sinf(run.cameraYaw), 0, -cosf(run.cameraYaw) };
@@ -298,6 +299,21 @@ int main() {
             bool jumpPressed = IsKeyPressed(kb.jump);
 
             UpdatePlayerPhysics(run.player, currentLevel, run.doorHeights, move, dt, jumpPressed, run.currentSubworld);
+
+            // Teletrasporti invisibili: entrando nel raggio di "from" si
+            // riappare esattamente a "to", senza alcun effetto ne' segnale.
+            // Usati per illusioni come la scala infinita di Penrose (si sale
+            // una rampa normale, e in cima si viene riportati silenziosamente
+            // in fondo). Azzerare la velocita' verticale evita che l'inerzia
+            // della caduta/salto venga portata con se' nel nuovo punto.
+            for (const auto& tp : currentLevel.teleporters) {
+                if (tp.subworld != -1 && tp.subworld != run.currentSubworld) continue;
+                if (Vector3Distance(run.player.position, tp.from) <= tp.radius) {
+                    run.player.position = tp.to;
+                    run.player.velocity.y = 0.0f;
+                    break;
+                }
+            }
 
             // Il giocatore puo' ruotare lo specchio piu' vicino (se abbastanza
             // vicino) con Q (senso antiorario) / E (senso orario), per
@@ -390,6 +406,7 @@ int main() {
                         float crateRadius = std::max(crateSize.x, crateSize.z) / 2.0f;
                         ResolveObstacles(cratePos, crateRadius, currentLevel.obstacles, run.currentSubworld);
                         ResolveDoors(cratePos, crateRadius, currentLevel.doors, run.doorHeights, run.currentSubworld);
+                        ResolvePlatformWalls(cratePos, crateRadius, currentLevel.platforms, run.currentSubworld);
                     }
 
                     ResolveBoxCollision(run.player.position, run.player.radius, cratePos, crateSize);
@@ -409,6 +426,7 @@ int main() {
                     float crateRadius = std::max(currentLevel.draggables[i].size.x, currentLevel.draggables[i].size.z) / 2.0f;
                     ResolveObstacles(run.draggablePos[i], crateRadius, currentLevel.obstacles, run.currentSubworld);
                     ResolveDoors(run.draggablePos[i], crateRadius, currentLevel.doors, run.doorHeights, run.currentSubworld);
+                    ResolvePlatformWalls(run.draggablePos[i], crateRadius, currentLevel.platforms, run.currentSubworld);
                 }
             }
 
@@ -422,7 +440,7 @@ int main() {
                 dp.y += dv.y * dt;
 
                 float groundY;
-                bool hasGround = FindGroundY(currentLevel, dp.x, dp.z, prevBottomY + 0.05f, run.currentSubworld, groundY);
+                bool hasGround = FindGroundY(currentLevel, dp.x, dp.z, prevBottomY + STEP_HEIGHT, run.currentSubworld, groundY);
                 if (hasGround && dp.y - halfH <= groundY && dv.y <= 0.0f) {
                     dp.y = groundY + halfH;
                     dv.y = 0.0f;
@@ -436,7 +454,9 @@ int main() {
             if (!run.solved && !currentLevel.switches.empty() && IsKeyPressed(kb.interact)) {
                 for (int i = 0; i < (int)currentLevel.switches.size(); i++) {
                     if (run.activated[i]) continue;
-                    const Vector3& sp = currentLevel.switches[i].position;
+                    const auto& sw = currentLevel.switches[i];
+                    if (sw.subworld != -1 && sw.subworld != run.currentSubworld) continue; // interruttore di un altro mondo: non c'e'
+                    const Vector3& sp = sw.position;
                     BoundingBox box = {
                         Vector3{ sp.x - 0.5f, sp.y - 0.5f, sp.z - 0.5f },
                         Vector3{ sp.x + 0.5f, sp.y + 0.5f, sp.z + 0.5f }
@@ -1142,7 +1162,7 @@ int main() {
             DrawText(TextFormat("Tempo: %s", FormatTime(run.elapsedTime).c_str()), 10, 102, 18, DARKGREEN);
            float nextHudY = 124.0f;
             if (LevelUsesSubworlds(currentLevel)) {
-                DrawText(TextFormat("Mondo: %d / 4", run.currentSubworld + 1), 10, 124, 18, PURPLE);
+                DrawText(TextFormat("Mondo: %d / %d", run.currentSubworld + 1, std::max(1, currentLevel.numSubworlds)), 10, 124, 18, PURPLE);
                 nextHudY = 146.0f;
             }
             DrawText("ESC: torna indietro   |   R: ricomincia", 10, screenHeight - 26, 16, DARKGRAY);

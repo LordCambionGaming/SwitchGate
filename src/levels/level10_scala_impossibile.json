@@ -1,0 +1,314 @@
+{
+  "description": "Continua a salire: la rampa sembra non finire mai, perche' in cima c'e' un teletrasporto invisibile che riporta all'inizio. A meta' salita pero' c'e' una diramazione dorata verso destra: prendila per uscire dal loop, attiva l'interruttore e raggiungi la porta.",
+  "name": "Livello 10 - La Scala Infinita",
+  "player_start": [
+    0.0,
+    1.0,
+    0.0
+  ],
+  "gravity": true,
+  "random_sequence": true,
+  "fall_reset_y": -8.0,
+  "switches": [
+    {
+      "color": "gold",
+      "position": [
+        5.0,
+        6.5,
+        12.0
+      ],
+      "name": "ORO",
+      "subworld": -1
+    }
+  ],
+  "doors": [
+    {
+      "color": "darkbrown",
+      "linked_switch": 0,
+      "linked_switches": [],
+      "logic_op": "OR",
+      "position": [
+        5.0,
+        6.0,
+        15.0
+      ],
+      "rotated": false,
+      "size": [
+        3.0,
+        3.0,
+        0.5
+      ],
+      "subworld": -1
+    }
+  ],
+  "exit": {
+    "position": [
+      5.0,
+      6.0,
+      16.0
+    ],
+    "radius": 1.2
+  },
+  "obstacles": [],
+  "pads": [],
+  "draggables": [],
+  "mirrors": [],
+  "emitters": [],
+  "receivers": [],
+  "platforms": [
+    {
+      "color": "lightgray",
+      "position": [
+        0.0,
+        -0.25,
+        0.0
+      ],
+      "size": [
+        3.0,
+        0.5,
+        1.6
+      ],
+      "subworld": -1
+    },
+    {
+      "color": "lightgray",
+      "position": [
+        0.0,
+        0.25,
+        1.0
+      ],
+      "size": [
+        3.0,
+        0.5,
+        1.1
+      ],
+      "subworld": -1
+    },
+    {
+      "color": "lightgray",
+      "position": [
+        0.0,
+        0.75,
+        2.0
+      ],
+      "size": [
+        3.0,
+        0.5,
+        1.1
+      ],
+      "subworld": -1
+    },
+    {
+      "color": "lightgray",
+      "position": [
+        0.0,
+        1.25,
+        3.0
+      ],
+      "size": [
+        3.0,
+        0.5,
+        1.1
+      ],
+      "subworld": -1
+    },
+    {
+      "color": "lightgray",
+      "position": [
+        0.0,
+        1.75,
+        4.0
+      ],
+      "size": [
+        3.0,
+        0.5,
+        1.1
+      ],
+      "subworld": -1
+    },
+    {
+      "color": "lightgray",
+      "position": [
+        0.0,
+        2.25,
+        5.0
+      ],
+      "size": [
+        3.0,
+        0.5,
+        1.1
+      ],
+      "subworld": -1
+    },
+    {
+      "color": "lightgray",
+      "position": [
+        0.0,
+        2.75,
+        6.0
+      ],
+      "size": [
+        3.0,
+        0.5,
+        1.1
+      ],
+      "subworld": -1
+    },
+    {
+      "color": "lightgray",
+      "position": [
+        0.0,
+        3.25,
+        7.0
+      ],
+      "size": [
+        3.0,
+        0.5,
+        1.1
+      ],
+      "subworld": -1
+    },
+    {
+      "color": "lightgray",
+      "position": [
+        0.0,
+        3.75,
+        8.0
+      ],
+      "size": [
+        3.0,
+        0.5,
+        1.1
+      ],
+      "subworld": -1
+    },
+    {
+      "color": "lightgray",
+      "position": [
+        0.0,
+        4.25,
+        9.0
+      ],
+      "size": [
+        3.0,
+        0.5,
+        1.1
+      ],
+      "subworld": -1
+    },
+    {
+      "color": "lightgray",
+      "position": [
+        0.0,
+        4.75,
+        10.0
+      ],
+      "size": [
+        3.0,
+        0.5,
+        1.1
+      ],
+      "subworld": -1
+    },
+    {
+      "color": "lightgray",
+      "position": [
+        0.0,
+        5.25,
+        11.0
+      ],
+      "size": [
+        3.0,
+        0.5,
+        1.1
+      ],
+      "subworld": -1
+    },
+    {
+      "color": "lightgray",
+      "position": [
+        0.0,
+        5.75,
+        12.0
+      ],
+      "size": [
+        3.0,
+        0.5,
+        1.1
+      ],
+      "subworld": -1
+    },
+    {
+      "color": "lightgray",
+      "position": [
+        0.0,
+        6.25,
+        13.0
+      ],
+      "size": [
+        3.0,
+        0.5,
+        1.1
+      ],
+      "subworld": -1
+    },
+    {
+      "color": "lightgray",
+      "position": [
+        0.0,
+        6.75,
+        14.0
+      ],
+      "size": [
+        3.0,
+        0.5,
+        1.1
+      ],
+      "subworld": -1
+    },
+    {
+      "color": "gold",
+      "position": [
+        2.25,
+        5.75,
+        12.0
+      ],
+      "size": [
+        1.5,
+        0.5,
+        1.1
+      ],
+      "subworld": -1
+    },
+    {
+      "color": "gold",
+      "position": [
+        5.0,
+        5.75,
+        13.0
+      ],
+      "size": [
+        4.0,
+        0.5,
+        7.0
+      ],
+      "subworld": -1
+    }
+  ],
+  "teleporters": [
+    {
+      "from": [
+        0.0,
+        7.0,
+        14.0
+      ],
+      "radius": 0.85,
+      "to": [
+        0.0,
+        0.5,
+        1.0
+      ],
+      "subworld": -1
+    }
+  ]
+}

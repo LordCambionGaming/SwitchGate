@@ -1,0 +1,29 @@
+{
+  "description": "Continua ad andare avanti, sempre nella stessa direzione, senza mai girarti: il corridoio si richiude su se stesso come un anello.",
+  "name": "Livello 11 - Il Corridoio ad Anello",
+  "player_start": [0.0, 1.0, -7.0],
+  "gravity": true,
+  "random_sequence": true,
+  "fall_reset_y": -8.0,
+  "wraparound": true,
+  "wrap_bound": 8.0,
+  "switches": [
+    { "color": "blue", "position": [0.0, 0.5, 6.0], "name": "BLU", "subworld": -1 }
+  ],
+  "doors": [
+    {
+      "color": "darkbrown", "linked_switch": 0, "linked_switches": [], "logic_op": "OR",
+      "position": [0.0, 0.0, -5.5], "rotated": false, "size": [3.0, 3.0, 0.5], "subworld": -1
+    }
+  ],
+  "exit": { "position": [0.0, 0.0, -4.5], "radius": 1.2 },
+  "obstacles": [],
+  "pads": [],
+  "draggables": [],
+  "mirrors": [],
+  "emitters": [],
+  "receivers": [],
+  "platforms": [
+    { "color": "lightgray", "position": [0.0, -0.25, 0.0], "size": [3.0, 0.5, 16.0], "subworld": -1 }
+  ]
+}

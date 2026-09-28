@@ -47,6 +47,7 @@ add_executable(${PROJECT_NAME}
     src/objects/Mirror.cpp
     src/objects/Emitter.cpp
     src/objects/Receiver.cpp
+    src/objects/Teleporter.cpp
 )
 target_link_libraries(${PROJECT_NAME} PRIVATE raylib nlohmann_json::nlohmann_json)
 

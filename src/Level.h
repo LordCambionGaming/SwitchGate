@@ -8,6 +8,7 @@
 #include "objects/Mirror.h"
 #include "objects/Emitter.h"
 #include "objects/Receiver.h"
+#include "objects/Teleporter.h"
 #include <string>
 #include <vector>
 
@@ -34,6 +35,7 @@ struct LevelData {
     std::vector<LevelMirror> mirrors;
     std::vector<LevelEmitter> emitters;
     std::vector<LevelReceiver> receivers;
+    std::vector<LevelTeleporter> teleporters;
 
     std::vector<LevelDoor> doors;
 
@@ -44,6 +46,18 @@ struct LevelData {
     // e viene rimandato al punto di partenza: e' cosi' che nascono i "pozzi" (pits),
     // semplicemente lasciando un vuoto tra due piattaforme nel file JSON.
     float fallResetY = -8.0f;
+
+    // "Mondo avvolgente" (stile Pac-Man): se attivo, superare wrapBound su X o
+    // Z riporta istantaneamente dal lato opposto. Disattivo di default, cosi'
+    // i livelli esistenti (che non lo dichiarano) restano invariati.
+    bool wraparound = false;
+    float wrapBound = 24.0f;
+
+    // Numero di sub-mondi di questo livello (vedi commento su LevelBox::subworld
+    // in objects/Box.h). Di default 4, uno per ogni scatto di 90 gradi della
+    // camera, ma un livello puo' usarne di meno o di piu': con N mondi la
+    // camera ci mette N scatti a tornare al mondo di partenza.
+    int numSubworlds = 4;
 };
 
 // Carica e tiene in memoria l'elenco dei livelli trovati in una cartella.
